@@ -15,8 +15,10 @@ fn main() {
 
 enum Opcode {
     NOP,
+    HALT,
     LD_R_R { target: Register8, source: Register8 },
-    LD_R_HL { target: Register8 }
+    LD_R_HL { target: Register8 },
+    LD_HL_R { source: Register8 },
 }
 
 struct Gameboy {
@@ -36,7 +38,6 @@ impl Gameboy {
         loop {
             self.run_single_opcode();
             todo!("timer wait accounting for clock, instruction cycles, and draw buffer");
-            if self.cpu.pc > 0xFFFF { break }
         }
     }
 
@@ -102,6 +103,24 @@ impl Gameboy {
             0x6D => Opcode::LD_R_R {target: L, source: L},
             0x6E => Opcode::LD_R_HL {target: L},
             0x6F => Opcode::LD_R_R {target: L, source: A},
+
+            0x70 => Opcode::LD_HL_R {source: B},
+            0x71 => Opcode::LD_HL_R {source: C},
+            0x72 => Opcode::LD_HL_R {source: D},
+            0x73 => Opcode::LD_HL_R {source: E},
+            0x74 => Opcode::LD_HL_R {source: H},
+            0x75 => Opcode::LD_HL_R {source: L},
+            0x76 => Opcode::HALT,
+            0x77 => Opcode::LD_HL_R {source: A},
+
+            0x78 => Opcode::LD_R_R {target: A, source: B},
+            0x79 => Opcode::LD_R_R {target: A, source: C},
+            0x7A => Opcode::LD_R_R {target: A, source: D},
+            0x7B => Opcode::LD_R_R {target: A, source: E},
+            0x7C => Opcode::LD_R_R {target: A, source: H},
+            0x7D => Opcode::LD_R_R {target: A, source: L},
+            0x7E => Opcode::LD_R_HL {target: A},
+            0x7F => Opcode::LD_R_R {target: A, source: A},
             _ => panic!("Unknown opcode {:#X}", byte)
         }
     }
@@ -109,48 +128,30 @@ impl Gameboy {
     fn execute(&mut self, opcode: Opcode) -> i32 {
         match opcode {
             Opcode::NOP => {
-                // No operation
                 self.cpu.pc += 1;
                 return 4
             },
             Opcode::LD_R_R {target, source} => {
-                let value = match source {
-                    A => self.cpu.a,
-                    B => self.cpu.b,
-                    C => self.cpu.c,
-                    D => self.cpu.d,
-                    E => self.cpu.e,
-                    H => self.cpu.h,
-                    L => self.cpu.l,
-                    _ => panic!("Cannot write to flag register")
-                };
-
-                match target {
-                    A => self.cpu.a = value,
-                    B => self.cpu.b = value,
-                    C => self.cpu.c = value,
-                    D => self.cpu.d = value,
-                    E => self.cpu.e = value,
-                    H => self.cpu.h = value,
-                    L => self.cpu.l = value,
-                    F => panic!("Cannot write to flag register")
-                }
+                let value = self.cpu.read8(source);
+                self.cpu.write8(target, value);
+                self.cpu.pc += 1;
                 return 4
             },
             Opcode::LD_R_HL { target } => {
                 let value = self.memory.read(self.cpu.read16(HL)).unwrap();
-                match target {
-                    A => self.cpu.a = value,
-                    B => self.cpu.b = value,
-                    C => self.cpu.c = value,
-                    D => self.cpu.d = value,
-                    E => self.cpu.e = value,
-                    H => self.cpu.h = value,
-                    L => self.cpu.l = value,
-                    F => panic!("Cannot write to flag register")
-                }
+                self.cpu.write8(target, value);
+                self.cpu.pc += 1;
                 return 8
-            }
+            },
+            Opcode::LD_HL_R {source } => {
+                let value = self.cpu.read8(source);
+                self.memory.write(self.cpu.read16(HL), value).unwrap();
+                self.cpu.pc += 1;
+                return 8
+            },
+            Opcode::HALT => {
+                panic!("Received HALT Opcode");
+            },
             _ => panic!("Opcode not implemented")
         }
     }
