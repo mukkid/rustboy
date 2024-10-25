@@ -107,7 +107,7 @@ impl Cpu {
 }
 
 struct Memory {
-    rom: Vec<u8>,
+    rom: [u8; 0x8000],
     vram: [u8; 0x2000],
     wram: [u8; 0x2000],
     echo_ram: [u8; 0x2000],
@@ -117,12 +117,13 @@ struct Memory {
     interrupt_enable: u8
 }
 
+#[derive(Debug)]
 struct MemoryAddressError;
 
 impl Memory {
-    fn new(rom_size: usize) -> Self {
+    fn new() -> Self {
         Self {
-            rom: vec![0; rom_size],
+            rom: [0; 0x8000],
             vram: [0; 0x2000],
             wram: [0; 0x2000],
             echo_ram: [0; 0x2000],
@@ -162,5 +163,55 @@ impl Memory {
             _ => return Err(MemoryAddressError)
         }
         Ok(())
+    }
+}
+
+enum Opcode {
+    NOP,
+}
+
+struct Gameboy {
+    cpu: Cpu,
+    memory: Memory
+}
+
+impl Gameboy {
+    fn new() -> Self{
+        Self {
+            cpu: Cpu::default(),
+            memory: Memory::new()
+        }
+    }
+
+    fn run(&mut self) {
+        loop {
+            self.run_single_opcode();
+            todo!("timer wait accounting for clock, instruction cycles, and draw buffer");
+            if self.cpu.pc > 0xFFFF { break }
+        }
+    }
+
+    fn run_single_opcode(&mut self) {
+        let opcode = self.fetch_opcode();
+        self.execute(opcode);
+    }
+
+    fn fetch_opcode(&self) -> Opcode {
+        let byte = self.memory.read(self.cpu.pc).unwrap();
+        match byte {
+            0x00 => Opcode::NOP,
+            _ => panic!("Unknown opcode {:#X}", byte)
+        }
+    }
+
+    fn execute(&mut self, opcode: Opcode) -> i32 {
+        match opcode {
+            Opcode::NOP => {
+                // No operation
+                self.cpu.pc += 1;
+                return 4
+            }
+            _ => panic!("Opcode not implemented")
+        }
     }
 }
