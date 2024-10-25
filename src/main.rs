@@ -1,173 +1,22 @@
-use std::{error::Error, net::AddrParseError};
+mod cpu;
+mod memory;
+
+use cpu::Cpu;
+use cpu::{Register, Register8, Register16};
+use cpu::Register8::*;
+use cpu::Register16::*;
+
+use memory::Memory;
 
 fn main() {
-    println!("Hello, world!");
-}
-#[derive(Default)]
-struct Cpu {
-    a: u8,
-    b: u8,
-    c: u8,
-    d: u8,
-    e: u8,
-    f: u8,
-    h: u8,
-    l: u8,
-    pc: u16,
-    sp: u16
-}
-
-#[derive(Debug)]
-enum Register {
-    Register8,
-    Register16,
-}
-
-enum Register8 {
-    A,
-    B,
-    C,
-    D,
-    E,
-    F,
-    H,
-    L
-}
-
-enum Register16 {
-    AF,
-    BC,
-    DE,
-    HL,
-    PC,
-    SP
-}
-
-
-struct InvalidRegisterOperation;
-
-fn split_word(word: u16) -> (u8, u8) {
-    let high = (word >> 8) as u8;
-    let low = (word & 0xFF) as u8;
-    (high, low)
-}
-
-fn join_bytes(high: u8, low: u8) -> u16 {
-    ((high as u16) << 8) | (low as u16)
-}
-
-impl Cpu {
-    fn write8(&mut self, target: Register8, data: u8) {
-        match target {
-            Register8::A => self.a = data,
-            Register8::B => self.b = data,
-            Register8::C => self.c = data,
-            Register8::D => self.d = data,
-            Register8::E => self.e = data,
-            Register8::F => self.f = data,
-            Register8::H => self.h = data,
-            Register8::L => self.l = data
-        }
-    }
-
-    fn write16(&mut self, target: Register16, data: u16) {
-        match target {
-            Register16::AF => (self.a, self.f) = split_word(data),
-            Register16::BC => (self.b, self.c) = split_word(data),
-            Register16::DE => (self.d, self.e) = split_word(data),
-            Register16::HL => (self.h, self.l) = split_word(data),
-            Register16::PC => self.pc = data,
-            Register16::SP => self.sp = data,
-        }
-    }
-
-    fn read8(&self, target: Register8) -> u8 {
-        match target {
-            Register8::A => self.a,
-            Register8::B => self.b,
-            Register8::C => self.c,
-            Register8::D => self.d,
-            Register8::E => self.e,
-            Register8::F => self.f,
-            Register8::H => self.h,
-            Register8::L => self.l
-        }
-    }
-
-    fn read16(&self, target: Register16) -> u16 {
-        match target {
-            Register16::AF => join_bytes(self.a, self.f),
-            Register16::BC => join_bytes(self.b, self.c),
-            Register16::DE => join_bytes(self.d, self.e),
-            Register16::HL => join_bytes(self.h, self.l),
-            Register16::PC => self.pc,
-            Register16::SP => self.sp
-        }
-    }
-}
-
-struct Memory {
-    rom: [u8; 0x8000],
-    vram: [u8; 0x2000],
-    wram: [u8; 0x2000],
-    echo_ram: [u8; 0x2000],
-    oam: [u8; 0xA0],
-    io: [u8; 0x80],
-    hram: [u8; 0x7F],
-    interrupt_enable: u8
-}
-
-#[derive(Debug)]
-struct MemoryAddressError;
-
-impl Memory {
-    fn new() -> Self {
-        Self {
-            rom: [0; 0x8000],
-            vram: [0; 0x2000],
-            wram: [0; 0x2000],
-            echo_ram: [0; 0x2000],
-            oam: [0; 0xA0],
-            io: [0; 0x80],
-            hram: [0; 0x7F],
-            interrupt_enable: 0
-        }
-    }
-
-    fn read(&self, address: u16) -> Result<u8, MemoryAddressError> {
-        Ok(
-            match address {
-                0x0000..=0x7FFF => self.rom[address as usize],
-                0x8000..=0x9FFF => self.vram[(address-0x8000) as usize],
-                0xC000..=0xCFFF => self.wram[(address-0xC000) as usize],
-                0xE000..=0xEFFF => self.echo_ram[(address-0xE000) as usize],
-                0xFE00..=0xFE9F => self.oam[(address-0xFE00) as usize],
-                0xFF00..=0xFF7F => self.io[(address-0xFF00) as usize],
-                0xFF80..=0xFFFE => self.hram[(address-0xFF80) as usize],
-                0xFFFF => self.interrupt_enable,
-                _ => return Err(MemoryAddressError)
-            }
-        )
-    }
-
-    fn write(&mut self, address: u16, value: u8) -> Result<(), MemoryAddressError> {
-        match address {
-            0x0000..=0x7FFF => self.rom[address as usize] = value,
-            0x8000..=0x9FFF => self.vram[(address-0x8000) as usize] = value,
-            0xC000..=0xCFFF => self.wram[(address-0xC000) as usize] = value,
-            0xE000..=0xEFFF => self.echo_ram[(address-0xE000) as usize] = value,
-            0xFE00..=0xFE9F => self.oam[(address-0xFE00) as usize] = value,
-            0xFF00..=0xFF7F => self.io[(address-0xFF00) as usize] = value,
-            0xFF80..=0xFFFE => self.hram[(address-0xFF80) as usize] = value,
-            0xFFFF => self.interrupt_enable = value,
-            _ => return Err(MemoryAddressError)
-        }
-        Ok(())
-    }
+    let mut gb = Gameboy::new();
+    gb.run();
 }
 
 enum Opcode {
     NOP,
+    LD_R_R { target: Register8, source: Register8 },
+    LD_R_HL { target: Register8 }
 }
 
 struct Gameboy {
@@ -200,6 +49,59 @@ impl Gameboy {
         let byte = self.memory.read(self.cpu.pc).unwrap();
         match byte {
             0x00 => Opcode::NOP,
+            0x40 => Opcode::LD_R_R {target: B, source: B},
+            0x41 => Opcode::LD_R_R {target: B, source: C},
+            0x42 => Opcode::LD_R_R {target: B, source: D},
+            0x43 => Opcode::LD_R_R {target: B, source: E},
+            0x44 => Opcode::LD_R_R {target: B, source: H},
+            0x45 => Opcode::LD_R_R {target: B, source: L},
+            0x46 => Opcode::LD_R_HL {target: B},
+            0x47 => Opcode::LD_R_R {target: B, source: A},
+
+            0x48 => Opcode::LD_R_R {target: C, source: B},
+            0x49 => Opcode::LD_R_R {target: C, source: C},
+            0x4A => Opcode::LD_R_R {target: C, source: D},
+            0x4B => Opcode::LD_R_R {target: C, source: E},
+            0x4C => Opcode::LD_R_R {target: C, source: H},
+            0x4D => Opcode::LD_R_R {target: C, source: L},
+            0x4E => Opcode::LD_R_HL {target: C},
+            0x4F => Opcode::LD_R_R {target: C, source: A},
+
+            0x50 => Opcode::LD_R_R {target: D, source: B},
+            0x51 => Opcode::LD_R_R {target: D, source: C},
+            0x52 => Opcode::LD_R_R {target: D, source: D},
+            0x53 => Opcode::LD_R_R {target: D, source: E},
+            0x54 => Opcode::LD_R_R {target: D, source: H},
+            0x55 => Opcode::LD_R_R {target: D, source: L},
+            0x56 => Opcode::LD_R_HL {target: D},
+            0x57 => Opcode::LD_R_R {target: D, source: A},
+
+            0x58 => Opcode::LD_R_R {target: E, source: B},
+            0x59 => Opcode::LD_R_R {target: E, source: C},
+            0x5A => Opcode::LD_R_R {target: E, source: D},
+            0x5B => Opcode::LD_R_R {target: E, source: E},
+            0x5C => Opcode::LD_R_R {target: E, source: H},
+            0x5D => Opcode::LD_R_R {target: E, source: L},
+            0x5E => Opcode::LD_R_HL {target: E},
+            0x5F => Opcode::LD_R_R {target: E, source: A},
+
+            0x60 => Opcode::LD_R_R {target: H, source: B},
+            0x61 => Opcode::LD_R_R {target: H, source: C},
+            0x62 => Opcode::LD_R_R {target: H, source: D},
+            0x63 => Opcode::LD_R_R {target: H, source: E},
+            0x64 => Opcode::LD_R_R {target: H, source: H},
+            0x65 => Opcode::LD_R_R {target: H, source: L},
+            0x66 => Opcode::LD_R_HL {target: H},
+            0x67 => Opcode::LD_R_R {target: H, source: A},
+
+            0x68 => Opcode::LD_R_R {target: L, source: B},
+            0x69 => Opcode::LD_R_R {target: L, source: C},
+            0x6A => Opcode::LD_R_R {target: L, source: D},
+            0x6B => Opcode::LD_R_R {target: L, source: E},
+            0x6C => Opcode::LD_R_R {target: L, source: H},
+            0x6D => Opcode::LD_R_R {target: L, source: L},
+            0x6E => Opcode::LD_R_HL {target: L},
+            0x6F => Opcode::LD_R_R {target: L, source: A},
             _ => panic!("Unknown opcode {:#X}", byte)
         }
     }
@@ -210,6 +112,44 @@ impl Gameboy {
                 // No operation
                 self.cpu.pc += 1;
                 return 4
+            },
+            Opcode::LD_R_R {target, source} => {
+                let value = match source {
+                    A => self.cpu.a,
+                    B => self.cpu.b,
+                    C => self.cpu.c,
+                    D => self.cpu.d,
+                    E => self.cpu.e,
+                    H => self.cpu.h,
+                    L => self.cpu.l,
+                    _ => panic!("Cannot write to flag register")
+                };
+
+                match target {
+                    A => self.cpu.a = value,
+                    B => self.cpu.b = value,
+                    C => self.cpu.c = value,
+                    D => self.cpu.d = value,
+                    E => self.cpu.e = value,
+                    H => self.cpu.h = value,
+                    L => self.cpu.l = value,
+                    F => panic!("Cannot write to flag register")
+                }
+                return 4
+            },
+            Opcode::LD_R_HL { target } => {
+                let value = self.memory.read(self.cpu.read16(HL)).unwrap();
+                match target {
+                    A => self.cpu.a = value,
+                    B => self.cpu.b = value,
+                    C => self.cpu.c = value,
+                    D => self.cpu.d = value,
+                    E => self.cpu.e = value,
+                    H => self.cpu.h = value,
+                    L => self.cpu.l = value,
+                    F => panic!("Cannot write to flag register")
+                }
+                return 8
             }
             _ => panic!("Opcode not implemented")
         }
