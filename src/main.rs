@@ -2,7 +2,7 @@ mod cpu;
 mod memory;
 
 use cpu::Cpu;
-use cpu::{Register, Register8, Register16};
+use cpu::{Register, Register8, Register16, Flag};
 use cpu::Register8::*;
 use cpu::Register16::*;
 
@@ -19,6 +19,8 @@ enum Opcode {
     LD_R_R { target: Register8, source: Register8 },
     LD_R_HL { target: Register8 },
     LD_HL_R { source: Register8 },
+    ADD_A_R { source: Register8 },
+    ADD_A_HL,
 }
 
 struct Gameboy {
@@ -121,6 +123,15 @@ impl Gameboy {
             0x7D => Opcode::LD_R_R {target: A, source: L},
             0x7E => Opcode::LD_R_HL {target: A},
             0x7F => Opcode::LD_R_R {target: A, source: A},
+
+            0x80 => Opcode::ADD_A_R { source: B },
+            0x81 => Opcode::ADD_A_R { source: C },
+            0x82 => Opcode::ADD_A_R { source: D },
+            0x83 => Opcode::ADD_A_R { source: E },
+            0x84 => Opcode::ADD_A_R { source: H },
+            0x85 => Opcode::ADD_A_R { source: L },
+            0x86 => Opcode::ADD_A_HL,
+            0x87 => Opcode::ADD_A_R { source: A },
             _ => panic!("Unknown opcode {:#X}", byte)
         }
     }
@@ -130,6 +141,9 @@ impl Gameboy {
             Opcode::NOP => {
                 self.cpu.pc += 1;
                 return 4
+            },
+            Opcode::HALT => {
+                panic!("Received HALT Opcode");
             },
             Opcode::LD_R_R {target, source} => {
                 let value = self.cpu.read8(source);
@@ -149,8 +163,31 @@ impl Gameboy {
                 self.cpu.pc += 1;
                 return 8
             },
-            Opcode::HALT => {
-                panic!("Received HALT Opcode");
+            Opcode::ADD_A_R { source } => {
+                let n1 = self.cpu.read8(A);
+                let n2 = self.cpu.read8(source);
+                let (sum, c) = n1.overflowing_add(n2);
+                self.cpu.write8(A, sum);
+
+                self.cpu.set_flag(Flag::Z, sum == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1, n2));
+                self.cpu.set_flag(Flag::C, c);
+                self.cpu.pc += 1;
+                return 4
+            },
+            Opcode::ADD_A_HL => {
+                let n1 = self.cpu.read8(A);
+                let n2 = self.memory.read(self.cpu.read16(HL)).unwrap();
+                let (sum, c) = n1.overflowing_add(n2);
+                self.cpu.write8(A, sum);
+
+                self.cpu.set_flag(Flag::Z, sum == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1, n2));
+                self.cpu.set_flag(Flag::C, c);
+                self.cpu.pc += 1;
+                return 8
             },
             _ => panic!("Opcode not implemented")
         }

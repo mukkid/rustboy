@@ -42,6 +42,13 @@ pub enum Register16 {
     SP
 }
 
+pub enum Flag {
+    Z,
+    N,
+    H,
+    C
+}
+
 
 pub struct InvalidRegisterOperation;
 
@@ -101,6 +108,19 @@ impl Cpu {
             Register16::HL => join_bytes(self.h, self.l),
             Register16::PC => self.pc,
             Register16::SP => self.sp
+        }
+    }
+
+    pub fn has_half_carry(a: u8, b: u8) -> bool {
+        ((a & 0xF) + (b & 0xF)) > 0xF
+    }
+
+    pub fn set_flag(&mut self, flag: Flag, value: bool) {
+        match flag {
+            Flag::Z => if value { self.f |= 0b1000_0000 } else { self.f &= 0b0111_1111 },
+            Flag::N => if value { self.f |= 0b0100_0000 } else { self.f &= 0b1011_1111 },
+            Flag::H => if value { self.f |= 0b0010_0000 } else { self.f &= 0b1101_1111 },
+            Flag::C => if value { self.f |= 0b0001_0000 } else { self.f &= 0b1110_1111 },
         }
     }
 }
