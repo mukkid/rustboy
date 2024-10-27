@@ -21,6 +21,12 @@ enum Opcode {
     LD_HL_R { source: Register8 },
     ADD_A_R { source: Register8 },
     ADD_A_HL,
+    ADC_A_R { source: Register8 },
+    ADC_A_HL,
+    SUB_A_R { source: Register8 },
+    SUB_A_HL,
+    SBC_A_R { source: Register8 },
+    SBC_A_HL,
 }
 
 struct Gameboy {
@@ -132,6 +138,16 @@ impl Gameboy {
             0x85 => Opcode::ADD_A_R { source: L },
             0x86 => Opcode::ADD_A_HL,
             0x87 => Opcode::ADD_A_R { source: A },
+
+            0x88 => Opcode::ADC_A_R { source: B },
+            0x89 => Opcode::ADC_A_R { source: C },
+            0x8A => Opcode::ADC_A_R { source: D },
+            0x8B => Opcode::ADC_A_R { source: E },
+            0x8C => Opcode::ADC_A_R { source: H },
+            0x8D => Opcode::ADC_A_R { source: L },
+            0x8E => Opcode::ADC_A_HL,
+            0x8F => Opcode::ADC_A_R { source: A },
+
             _ => panic!("Unknown opcode {:#X}", byte)
         }
     }
@@ -186,6 +202,92 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::N, false);
                 self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1, n2));
                 self.cpu.set_flag(Flag::C, c);
+                self.cpu.pc += 1;
+                return 8
+            },
+            Opcode::ADC_A_R { source } => {
+                let n1 = self.cpu.read8(A);
+                let n2 = self.cpu.read8(source);
+                let carry_flag = self.cpu.get_flag(Flag::C);
+                let (partial_sum, partial_c) = n1.overflowing_add(n2);
+                let (sum, c) = partial_sum.overflowing_add(carry_flag);
+                self.cpu.write8(A, sum);
+
+                self.cpu.set_flag(Flag::Z, sum == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1, n2));
+                self.cpu.set_flag(Flag::C, c || partial_c);
+                self.cpu.pc += 1;
+                return 4
+            },
+            Opcode::ADC_A_HL => {
+                let n1 = self.cpu.read8(A);
+                let n2 = self.memory.read(self.cpu.read16(HL)).unwrap();
+                let carry_flag = self.cpu.get_flag(Flag::C);
+                let (partial_sum, partial_c) = n1.overflowing_add(n2);
+                let (sum, c) = partial_sum.overflowing_add(carry_flag);
+                self.cpu.write8(A, sum);
+
+                self.cpu.set_flag(Flag::Z, sum == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1, n2) || Cpu::has_half_carry(partial_sum, carry_flag));
+                self.cpu.set_flag(Flag::C, c || partial_c);
+                self.cpu.pc += 1;
+                return 8
+            },
+            Opcode::SUB_A_R { source } => {
+                let n1 = self.cpu.read8(A);
+                let n2 = self.cpu.read8(source);
+                let (sum, c) = n1.overflowing_sub(n2);
+                self.cpu.write8(A, sum);
+
+                self.cpu.set_flag(Flag::Z, sum == 0);
+                self.cpu.set_flag(Flag::N, true);
+                self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1, n2));
+                self.cpu.set_flag(Flag::C, c);
+                self.cpu.pc += 1;
+                return 4
+            },
+            Opcode::SUB_A_HL => {
+                let n1 = self.cpu.read8(A);
+                let n2 = self.memory.read(self.cpu.read16(HL)).unwrap();
+                let (sum, c) = n1.overflowing_sub(n2);
+                self.cpu.write8(A, sum);
+
+                self.cpu.set_flag(Flag::Z, sum == 0);
+                self.cpu.set_flag(Flag::N, true);
+                self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1, n2));
+                self.cpu.set_flag(Flag::C, c);
+                self.cpu.pc += 1;
+                return 8
+            },
+            Opcode::SBC_A_R { source } => {
+                let n1 = self.cpu.read8(A);
+                let n2 = self.cpu.read8(source);
+                let carry_flag = self.cpu.get_flag(Flag::C);
+                let (partial_sum, partial_c) = n1.overflowing_sub(n2);
+                let (sum, c) = partial_sum.overflowing_sub(carry_flag);
+                self.cpu.write8(A, sum);
+
+                self.cpu.set_flag(Flag::Z, sum == 0);
+                self.cpu.set_flag(Flag::N, true);
+                self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1, n2) || Cpu::has_half_carry(partial_sum, carry_flag));
+                self.cpu.set_flag(Flag::C, c || partial_c);
+                self.cpu.pc += 1;
+                return 4
+            },
+            Opcode::SBC_A_HL => {
+                let n1 = self.cpu.read8(A);
+                let n2 = self.memory.read(self.cpu.read16(HL)).unwrap();
+                let carry_flag = self.cpu.get_flag(Flag::C);
+                let (partial_sum, partial_c) = n1.overflowing_sub(n2);
+                let (sum, c) = partial_sum.overflowing_sub(carry_flag);
+                self.cpu.write8(A, sum);
+
+                self.cpu.set_flag(Flag::Z, sum == 0);
+                self.cpu.set_flag(Flag::N, true);
+                self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1, n2));
+                self.cpu.set_flag(Flag::C, c || partial_c);
                 self.cpu.pc += 1;
                 return 8
             },

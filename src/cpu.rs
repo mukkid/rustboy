@@ -123,4 +123,13 @@ impl Cpu {
             Flag::C => if value { self.f |= 0b0001_0000 } else { self.f &= 0b1110_1111 },
         }
     }
+
+    pub fn get_flag(&self, flag: Flag) -> u8 {
+        match flag {
+            Flag::Z => (self.f & 0b1000_0000) >> 7,
+            Flag::N => (self.f & 0b0100_0000) >> 6,
+            Flag::H => (self.f & 0b0010_0000) >> 5,
+            Flag::C => (self.f & 0b0001_0000) >> 4,
+        }
+    }
 }
