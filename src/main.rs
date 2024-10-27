@@ -1,6 +1,8 @@
 mod cpu;
 mod memory;
 
+use std::iter::Zip;
+
 use cpu::Cpu;
 use cpu::{Register, Register8, Register16, Flag};
 use cpu::Register8::*;
@@ -27,6 +29,14 @@ enum Opcode {
     SUB_A_HL,
     SBC_A_R { source: Register8 },
     SBC_A_HL,
+    AND_A_R { source: Register8 },
+    AND_A_HL,
+    XOR_A_R { source: Register8 },
+    XOR_A_HL,
+    OR_A_R { source: Register8 },
+    OR_A_HL,
+    CP_A_R { source: Register8 },
+    CP_A_HL,
 }
 
 struct Gameboy {
@@ -148,6 +158,60 @@ impl Gameboy {
             0x8E => Opcode::ADC_A_HL,
             0x8F => Opcode::ADC_A_R { source: A },
 
+            0x90 => Opcode::SUB_A_R {source: B },
+            0x91 => Opcode::SUB_A_R {source: C },
+            0x92 => Opcode::SUB_A_R {source: D },
+            0x93 => Opcode::SUB_A_R {source: E },
+            0x94 => Opcode::SUB_A_R {source: H },
+            0x95 => Opcode::SUB_A_R {source: L },
+            0x96 => Opcode::SUB_A_HL,
+            0x97 => Opcode::SUB_A_R {source: A },
+
+            0x98 => Opcode::SBC_A_R {source: B },
+            0x99 => Opcode::SBC_A_R {source: C },
+            0x9A => Opcode::SBC_A_R {source: D },
+            0x9B => Opcode::SBC_A_R {source: E },
+            0x9C => Opcode::SBC_A_R {source: H },
+            0x9D => Opcode::SBC_A_R {source: L },
+            0x9E => Opcode::SBC_A_HL,
+            0x9F => Opcode::SBC_A_R {source: A },
+
+            0xA0 => Opcode::AND_A_R { source: B },
+            0xA1 => Opcode::AND_A_R { source: C },
+            0xA2 => Opcode::AND_A_R { source: D },
+            0xA3 => Opcode::AND_A_R { source: E },
+            0xA4 => Opcode::AND_A_R { source: H },
+            0xA5 => Opcode::AND_A_R { source: L },
+            0xA6 => Opcode::AND_A_HL,
+            0xA7 => Opcode::AND_A_R { source: A },
+
+            0xA8 => Opcode::XOR_A_R { source: B },
+            0xA9 => Opcode::XOR_A_R { source: C },
+            0xAA => Opcode::XOR_A_R { source: D },
+            0xAB => Opcode::XOR_A_R { source: E },
+            0xAC => Opcode::XOR_A_R { source: H },
+            0xAD => Opcode::XOR_A_R { source: L },
+            0xAE => Opcode::XOR_A_HL,
+            0xAF => Opcode::XOR_A_R { source: A },
+
+            0xB0 => Opcode::OR_A_R { source: B },
+            0xB1 => Opcode::OR_A_R { source: C },
+            0xB2 => Opcode::OR_A_R { source: D },
+            0xB3 => Opcode::OR_A_R { source: E },
+            0xB4 => Opcode::OR_A_R { source: H },
+            0xB5 => Opcode::OR_A_R { source: L },
+            0xB6 => Opcode::OR_A_HL,
+            0xB7 => Opcode::OR_A_R { source: A },
+
+            0xB8 => Opcode::CP_A_R { source: B },
+            0xB9 => Opcode::CP_A_R { source: C },
+            0xBA => Opcode::CP_A_R { source: D },
+            0xBB => Opcode::CP_A_R { source: E },
+            0xBC => Opcode::CP_A_R { source: H },
+            0xBD => Opcode::CP_A_R { source: L },
+            0xBE => Opcode::CP_A_HL,
+            0xBF => Opcode::CP_A_R { source: A },
+
             _ => panic!("Unknown opcode {:#X}", byte)
         }
     }
@@ -243,7 +307,7 @@ impl Gameboy {
 
                 self.cpu.set_flag(Flag::Z, sum == 0);
                 self.cpu.set_flag(Flag::N, true);
-                self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1, n2));
+                self.cpu.set_flag(Flag::H, Cpu::has_half_borrow(n1, n2));
                 self.cpu.set_flag(Flag::C, c);
                 self.cpu.pc += 1;
                 return 4
@@ -256,7 +320,7 @@ impl Gameboy {
 
                 self.cpu.set_flag(Flag::Z, sum == 0);
                 self.cpu.set_flag(Flag::N, true);
-                self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1, n2));
+                self.cpu.set_flag(Flag::H, Cpu::has_half_borrow(n1, n2));
                 self.cpu.set_flag(Flag::C, c);
                 self.cpu.pc += 1;
                 return 8
@@ -271,7 +335,7 @@ impl Gameboy {
 
                 self.cpu.set_flag(Flag::Z, sum == 0);
                 self.cpu.set_flag(Flag::N, true);
-                self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1, n2) || Cpu::has_half_carry(partial_sum, carry_flag));
+                self.cpu.set_flag(Flag::H, Cpu::has_half_borrow(n1, n2) || Cpu::has_half_borrow(partial_sum, carry_flag));
                 self.cpu.set_flag(Flag::C, c || partial_c);
                 self.cpu.pc += 1;
                 return 4
@@ -286,11 +350,114 @@ impl Gameboy {
 
                 self.cpu.set_flag(Flag::Z, sum == 0);
                 self.cpu.set_flag(Flag::N, true);
-                self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1, n2));
+                self.cpu.set_flag(Flag::H, Cpu::has_half_borrow(n1, n2));
                 self.cpu.set_flag(Flag::C, c || partial_c);
                 self.cpu.pc += 1;
                 return 8
             },
+            Opcode::AND_A_R { source } => {
+                let n1 = self.cpu.read8(A);
+                let n2 = self.cpu.read8(source);
+                let value = n1 & n2;
+                self.cpu.write8(A, value);
+
+                self.cpu.set_flag(Flag::Z, value == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, true);
+                self.cpu.set_flag(Flag::C, false);
+                self.cpu.pc += 1;
+                return 4
+            },
+            Opcode::AND_A_HL => {
+                let n1 = self.cpu.read8(A);
+                let n2 = self.memory.read(self.cpu.read16(HL)).unwrap();
+                let value = n1 & n2;
+                self.cpu.write8(A, value);
+
+                self.cpu.set_flag(Flag::Z, value == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, true);
+                self.cpu.set_flag(Flag::C, false);
+                self.cpu.pc += 1;
+                return 8
+            },
+            Opcode::XOR_A_R { source } => {
+                let n1 = self.cpu.read8(A);
+                let n2 = self.cpu.read8(source);
+                let value = n1 ^ n2;
+                self.cpu.write8(A, value);
+
+                self.cpu.set_flag(Flag::Z, value == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, false);
+                self.cpu.pc += 1;
+                return 4
+            },
+            Opcode::XOR_A_HL => {
+                let n1 = self.cpu.read8(A);
+                let n2 = self.memory.read(self.cpu.read16(HL)).unwrap();
+                let value = n1 ^ n2;
+                self.cpu.write8(A, value);
+
+                self.cpu.set_flag(Flag::Z, value == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, false);
+                self.cpu.pc += 1;
+                return 8
+            },
+            Opcode::OR_A_R { source } => {
+                let n1 = self.cpu.read8(A);
+                let n2 = self.cpu.read8(source);
+                let value = n1 | n2;
+                self.cpu.write8(A, value);
+
+                self.cpu.set_flag(Flag::Z, value == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, false);
+                self.cpu.pc += 1;
+                return 4
+            },
+            Opcode::OR_A_HL => {
+                let n1 = self.cpu.read8(A);
+                let n2 = self.memory.read(self.cpu.read16(HL)).unwrap();
+                let value = n1 | n2;
+                self.cpu.write8(A, value);
+
+                self.cpu.set_flag(Flag::Z, value == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, false);
+                self.cpu.pc += 1;
+                return 8
+            },
+            Opcode::CP_A_R { source } => {
+                let n1 = self.cpu.read8(A);
+                let n2 = self.cpu.read8(source);
+                let (sum, c) = n1.overflowing_sub(n2);
+
+                self.cpu.set_flag(Flag::Z, sum == 0);
+                self.cpu.set_flag(Flag::N, true);
+                self.cpu.set_flag(Flag::H, Cpu::has_half_borrow(n1, n2));
+                self.cpu.set_flag(Flag::C, c);
+                self.cpu.pc += 1;
+                return 4
+            },
+            Opcode::CP_A_HL => {
+                let n1 = self.cpu.read8(A);
+                let n2 = self.memory.read(self.cpu.read16(HL)).unwrap();
+                let (sum, c) = n1.overflowing_sub(n2);
+
+                self.cpu.set_flag(Flag::Z, sum == 0);
+                self.cpu.set_flag(Flag::N, true);
+                self.cpu.set_flag(Flag::H, Cpu::has_half_borrow(n1, n2));
+                self.cpu.set_flag(Flag::C, c);
+                self.cpu.pc += 1;
+                return 8
+            },
+            
             _ => panic!("Opcode not implemented")
         }
     }

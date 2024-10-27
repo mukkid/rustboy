@@ -115,6 +115,10 @@ impl Cpu {
         ((a & 0xF) + (b & 0xF)) > 0xF
     }
 
+    pub fn has_half_borrow(a: u8, b: u8) -> bool {
+        (a & 0xF) < (b & 0xF)
+    }
+
     pub fn set_flag(&mut self, flag: Flag, value: bool) {
         match flag {
             Flag::Z => if value { self.f |= 0b1000_0000 } else { self.f &= 0b0111_1111 },
