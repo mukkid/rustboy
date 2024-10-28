@@ -1,8 +1,6 @@
 mod cpu;
 mod memory;
 
-use std::iter::Zip;
-
 use cpu::Cpu;
 use cpu::{Register, Register8, Register16, Flag};
 use cpu::Register8::*;
@@ -15,6 +13,7 @@ fn main() {
     gb.run();
 }
 
+#[allow(non_camel_case_types)]
 enum Opcode {
     NOP,
     HALT,
