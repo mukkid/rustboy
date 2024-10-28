@@ -2,7 +2,7 @@ mod cpu;
 mod memory;
 
 use cpu::Cpu;
-use cpu::{Register, Register8, Register16, Flag};
+use cpu::{Register8, Register16, Flag};
 use cpu::Register8::*;
 use cpu::Register16::*;
 
@@ -36,6 +36,9 @@ enum Opcode {
     OR_A_HL,
     CP_A_R { source: Register8 },
     CP_A_HL,
+    LD_R_N { target: Register8 },
+    LD_R16_N { target: Register16 },
+    LD_HL_N,
 }
 
 struct Gameboy {
@@ -67,6 +70,20 @@ impl Gameboy {
         let byte = self.memory.read(self.cpu.pc).unwrap();
         match byte {
             0x00 => Opcode::NOP,
+
+            0x01 => Opcode::LD_R16_N { target: BC },
+            0x06 => Opcode::LD_R_N { target: B },
+            0x0E => Opcode::LD_R_N { target: C },
+            0x11 => Opcode::LD_R16_N { target: DE },
+            0x16 => Opcode::LD_R_N { target: D },
+            0x1E => Opcode::LD_R_N { target: E },
+            0x21 => Opcode::LD_R16_N { target: HL },
+            0x26 => Opcode::LD_R_N { target: H },
+            0x2E => Opcode::LD_R_N { target: L },
+            0x31 => Opcode::LD_R16_N { target: SP },
+            0x36 => Opcode::LD_HL_N,
+            0x3E => Opcode::LD_R_N { target: A },
+
             0x40 => Opcode::LD_R_R {target: B, source: B},
             0x41 => Opcode::LD_R_R {target: B, source: C},
             0x42 => Opcode::LD_R_R {target: B, source: D},
@@ -456,8 +473,26 @@ impl Gameboy {
                 self.cpu.pc += 1;
                 return 8
             },
-            
-            _ => panic!("Opcode not implemented")
+            Opcode::LD_R16_N { target } => {
+                let lsb = self.memory.read(self.cpu.pc+1).unwrap();
+                let msb = self.memory.read(self.cpu.pc+2).unwrap();
+                let value = cpu::join_bytes(msb, lsb);
+                self.cpu.write16(target, value);
+                self.cpu.pc += 3;
+                return 12
+            },
+            Opcode::LD_R_N { target } => {
+                let value = self.memory.read(self.cpu.pc+1).unwrap();
+                self.cpu.write8(target, value);
+                self.cpu.pc += 2;
+                return 8
+            },
+            Opcode::LD_HL_N => {
+                let value = self.memory.read(self.cpu.pc+1).unwrap();
+                self.memory.write(self.cpu.read16(HL), value).unwrap();
+                self.cpu.pc += 2;
+                return 12
+            }
         }
     }
 }

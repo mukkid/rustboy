@@ -58,7 +58,7 @@ fn split_word(word: u16) -> (u8, u8) {
     (high, low)
 }
 
-fn join_bytes(high: u8, low: u8) -> u16 {
+pub fn join_bytes(high: u8, low: u8) -> u16 {
     ((high as u16) << 8) | (low as u16)
 }
 
