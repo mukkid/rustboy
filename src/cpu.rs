@@ -31,8 +31,8 @@ pub enum Register8 {
     H,
     L
 }
-#[derive(Debug)]
 
+#[derive(Debug)]
 pub enum Register16 {
     AF,
     BC,
@@ -100,7 +100,7 @@ impl Cpu {
         }
     }
 
-    pub fn read16(&self, target: Register16) -> u16 {
+    pub fn read16(&self, target: &Register16) -> u16 {
         match target {
             Register16::AF => join_bytes(self.a, self.f),
             Register16::BC => join_bytes(self.b, self.c),

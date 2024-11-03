@@ -20,6 +20,8 @@ enum Opcode {
     LD_R_R { target: Register8, source: Register8 },
     LD_R_HL { target: Register8 },
     LD_HL_R { source: Register8 },
+    INC_R16 { target: Register16 },
+    DEC_R16 {target: Register16 },
     ADD_A_R { source: Register8 },
     ADD_A_HL,
     ADC_A_R { source: Register8 },
@@ -72,16 +74,24 @@ impl Gameboy {
             0x00 => Opcode::NOP,
 
             0x01 => Opcode::LD_R16_N { target: BC },
+            0x03 => Opcode::INC_R16 { target: BC },
             0x06 => Opcode::LD_R_N { target: B },
+            0x0B => Opcode::DEC_R16 { target: BC },
             0x0E => Opcode::LD_R_N { target: C },
             0x11 => Opcode::LD_R16_N { target: DE },
+            0x13 => Opcode::INC_R16 { target: DE },
             0x16 => Opcode::LD_R_N { target: D },
+            0x1B => Opcode::DEC_R16 { target: DE },
             0x1E => Opcode::LD_R_N { target: E },
             0x21 => Opcode::LD_R16_N { target: HL },
+            0x23 => Opcode::INC_R16 { target: HL },
             0x26 => Opcode::LD_R_N { target: H },
+            0x2B => Opcode::DEC_R16 { target: HL },
             0x2E => Opcode::LD_R_N { target: L },
             0x31 => Opcode::LD_R16_N { target: SP },
+            0x33 => Opcode::INC_R16 { target: SP },
             0x36 => Opcode::LD_HL_N,
+            0x3B => Opcode::DEC_R16 { target: SP },
             0x3E => Opcode::LD_R_N { target: A },
 
             0x40 => Opcode::LD_R_R {target: B, source: B},
@@ -248,14 +258,14 @@ impl Gameboy {
                 return 4
             },
             Opcode::LD_R_HL { target } => {
-                let value = self.memory.read(self.cpu.read16(HL)).unwrap();
+                let value = self.memory.read(self.cpu.read16(&HL)).unwrap();
                 self.cpu.write8(target, value);
                 self.cpu.pc += 1;
                 return 8
             },
             Opcode::LD_HL_R {source } => {
                 let value = self.cpu.read8(source);
-                self.memory.write(self.cpu.read16(HL), value).unwrap();
+                self.memory.write(self.cpu.read16(&HL), value).unwrap();
                 self.cpu.pc += 1;
                 return 8
             },
@@ -274,7 +284,7 @@ impl Gameboy {
             },
             Opcode::ADD_A_HL => {
                 let n1 = self.cpu.read8(A);
-                let n2 = self.memory.read(self.cpu.read16(HL)).unwrap();
+                let n2 = self.memory.read(self.cpu.read16(&HL)).unwrap();
                 let (sum, c) = n1.overflowing_add(n2);
                 self.cpu.write8(A, sum);
 
@@ -302,7 +312,7 @@ impl Gameboy {
             },
             Opcode::ADC_A_HL => {
                 let n1 = self.cpu.read8(A);
-                let n2 = self.memory.read(self.cpu.read16(HL)).unwrap();
+                let n2 = self.memory.read(self.cpu.read16(&HL)).unwrap();
                 let carry_flag = self.cpu.get_flag(Flag::C);
                 let (partial_sum, partial_c) = n1.overflowing_add(n2);
                 let (sum, c) = partial_sum.overflowing_add(carry_flag);
@@ -330,7 +340,7 @@ impl Gameboy {
             },
             Opcode::SUB_A_HL => {
                 let n1 = self.cpu.read8(A);
-                let n2 = self.memory.read(self.cpu.read16(HL)).unwrap();
+                let n2 = self.memory.read(self.cpu.read16(&HL)).unwrap();
                 let (sum, c) = n1.overflowing_sub(n2);
                 self.cpu.write8(A, sum);
 
@@ -358,7 +368,7 @@ impl Gameboy {
             },
             Opcode::SBC_A_HL => {
                 let n1 = self.cpu.read8(A);
-                let n2 = self.memory.read(self.cpu.read16(HL)).unwrap();
+                let n2 = self.memory.read(self.cpu.read16(&HL)).unwrap();
                 let carry_flag = self.cpu.get_flag(Flag::C);
                 let (partial_sum, partial_c) = n1.overflowing_sub(n2);
                 let (sum, c) = partial_sum.overflowing_sub(carry_flag);
@@ -386,7 +396,7 @@ impl Gameboy {
             },
             Opcode::AND_A_HL => {
                 let n1 = self.cpu.read8(A);
-                let n2 = self.memory.read(self.cpu.read16(HL)).unwrap();
+                let n2 = self.memory.read(self.cpu.read16(&HL)).unwrap();
                 let value = n1 & n2;
                 self.cpu.write8(A, value);
 
@@ -412,7 +422,7 @@ impl Gameboy {
             },
             Opcode::XOR_A_HL => {
                 let n1 = self.cpu.read8(A);
-                let n2 = self.memory.read(self.cpu.read16(HL)).unwrap();
+                let n2 = self.memory.read(self.cpu.read16(&HL)).unwrap();
                 let value = n1 ^ n2;
                 self.cpu.write8(A, value);
 
@@ -438,7 +448,7 @@ impl Gameboy {
             },
             Opcode::OR_A_HL => {
                 let n1 = self.cpu.read8(A);
-                let n2 = self.memory.read(self.cpu.read16(HL)).unwrap();
+                let n2 = self.memory.read(self.cpu.read16(&HL)).unwrap();
                 let value = n1 | n2;
                 self.cpu.write8(A, value);
 
@@ -463,7 +473,7 @@ impl Gameboy {
             },
             Opcode::CP_A_HL => {
                 let n1 = self.cpu.read8(A);
-                let n2 = self.memory.read(self.cpu.read16(HL)).unwrap();
+                let n2 = self.memory.read(self.cpu.read16(&HL)).unwrap();
                 let (sum, c) = n1.overflowing_sub(n2);
 
                 self.cpu.set_flag(Flag::Z, sum == 0);
@@ -489,10 +499,22 @@ impl Gameboy {
             },
             Opcode::LD_HL_N => {
                 let value = self.memory.read(self.cpu.pc+1).unwrap();
-                self.memory.write(self.cpu.read16(HL), value).unwrap();
+                self.memory.write(self.cpu.read16(&HL), value).unwrap();
                 self.cpu.pc += 2;
                 return 12
-            }
+            },
+            Opcode::INC_R16 { target } => {
+                let value = self.cpu.read16(&target).wrapping_add(1);
+                self.cpu.write16(target, value);
+                self.cpu.pc += 1;
+                return 8
+            },
+            Opcode::DEC_R16 { target } => {
+                let value = self.cpu.read16(&target).wrapping_sub(1);
+                self.cpu.write16(target, value);
+                self.cpu.pc += 1;
+                return 8
+            },
         }
     }
 }
