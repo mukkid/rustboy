@@ -6,7 +6,7 @@ pub struct Memory {
     pub oam: [u8; 0xA0],
     pub io: [u8; 0x80],
     pub hram: [u8; 0x7F],
-    pub interrupt_enable: u8
+    pub interrupt_enable: u8,
 }
 
 #[derive(Debug)]
@@ -22,37 +22,35 @@ impl Memory {
             oam: [0; 0xA0],
             io: [0; 0x80],
             hram: [0; 0x7F],
-            interrupt_enable: 0
+            interrupt_enable: 0,
         }
     }
 
     pub fn read(&self, address: u16) -> Result<u8, MemoryAddressError> {
-        Ok(
-            match address {
-                0x0000..=0x7FFF => self.rom[address as usize],
-                0x8000..=0x9FFF => self.vram[(address-0x8000) as usize],
-                0xC000..=0xCFFF => self.wram[(address-0xC000) as usize],
-                0xE000..=0xEFFF => self.echo_ram[(address-0xE000) as usize],
-                0xFE00..=0xFE9F => self.oam[(address-0xFE00) as usize],
-                0xFF00..=0xFF7F => self.io[(address-0xFF00) as usize],
-                0xFF80..=0xFFFE => self.hram[(address-0xFF80) as usize],
-                0xFFFF => self.interrupt_enable,
-                _ => return Err(MemoryAddressError)
-            }
-        )
+        Ok(match address {
+            0x0000..=0x7FFF => self.rom[address as usize],
+            0x8000..=0x9FFF => self.vram[(address - 0x8000) as usize],
+            0xC000..=0xCFFF => self.wram[(address - 0xC000) as usize],
+            0xE000..=0xEFFF => self.echo_ram[(address - 0xE000) as usize],
+            0xFE00..=0xFE9F => self.oam[(address - 0xFE00) as usize],
+            0xFF00..=0xFF7F => self.io[(address - 0xFF00) as usize],
+            0xFF80..=0xFFFE => self.hram[(address - 0xFF80) as usize],
+            0xFFFF => self.interrupt_enable,
+            _ => return Err(MemoryAddressError),
+        })
     }
 
     pub fn write(&mut self, address: u16, value: u8) -> Result<(), MemoryAddressError> {
         match address {
             0x0000..=0x7FFF => self.rom[address as usize] = value,
-            0x8000..=0x9FFF => self.vram[(address-0x8000) as usize] = value,
-            0xC000..=0xCFFF => self.wram[(address-0xC000) as usize] = value,
-            0xE000..=0xEFFF => self.echo_ram[(address-0xE000) as usize] = value,
-            0xFE00..=0xFE9F => self.oam[(address-0xFE00) as usize] = value,
-            0xFF00..=0xFF7F => self.io[(address-0xFF00) as usize] = value,
-            0xFF80..=0xFFFE => self.hram[(address-0xFF80) as usize] = value,
+            0x8000..=0x9FFF => self.vram[(address - 0x8000) as usize] = value,
+            0xC000..=0xCFFF => self.wram[(address - 0xC000) as usize] = value,
+            0xE000..=0xEFFF => self.echo_ram[(address - 0xE000) as usize] = value,
+            0xFE00..=0xFE9F => self.oam[(address - 0xFE00) as usize] = value,
+            0xFF00..=0xFF7F => self.io[(address - 0xFF00) as usize] = value,
+            0xFF80..=0xFFFE => self.hram[(address - 0xFF80) as usize] = value,
             0xFFFF => self.interrupt_enable = value,
-            _ => return Err(MemoryAddressError)
+            _ => return Err(MemoryAddressError),
         }
         Ok(())
     }
