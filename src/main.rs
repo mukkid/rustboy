@@ -45,6 +45,28 @@ enum Opcode {
     LD_R_N { target: Register8 },
     LD_R16_N { target: Register16 },
     LD_HL_N,
+    SET_u3_R8 { bit: u8, target: Register8 },
+    SET_u3_HL { bit: u8 },
+    RES_u3_R8 { bit: u8, target: Register8 },
+    RES_u3_HL { bit: u8 },
+    BIT_u3_R8 { bit: u8, target: Register8 },
+    BIT_u3_HL { bit: u8 },
+    SWAP_R8 { target: Register8 },
+    SWAP_HL,
+    RLC_R8 { target: Register8 },
+    RLC_HL,
+    RRC_R8 { target: Register8 },
+    RRC_HL,
+    RL_R8 { target: Register8 },
+    RL_HL,
+    RR_R8 { target: Register8 },
+    RR_HL,
+    SLA_R8 { target: Register8 },
+    SLA_HL,
+    SRA_R8 { target: Register8 },
+    SRA_HL,
+    SRL_R8 { target: Register8 },
+    SRL_HL,
 }
 
 struct Gameboy {
@@ -303,7 +325,7 @@ impl Gameboy {
             0xC8 => todo!("RET Z"),
             0xC9 => todo!("RET"),
             0xCA => todo!("JP Z, a16"),
-            0xCB => todo!("PREFIX"),
+            0xCB => self.fetch_prefixed_opcode(),
             0xCC => todo!("CALL Z, a16"),
             0xCD => todo!("CALL a16"),
             0xCE => todo!("ADC A, n8"),
@@ -362,6 +384,299 @@ impl Gameboy {
             0xFD => panic!("Unknown opcode {:#X}", byte),
             0xFE => todo!("CP A, n8"),
             0xFF => todo!("RST $38"),
+        }
+    }
+
+    fn fetch_prefixed_opcode(&self) -> Opcode {
+        let byte = self.memory.read(self.cpu.pc + 1).unwrap();
+        match byte {
+            0x00 => Opcode::RLC_R8 { target: B },
+            0x01 => Opcode::RLC_R8 { target: C },
+            0x02 => Opcode::RLC_R8 { target: D },
+            0x03 => Opcode::RLC_R8 { target: E },
+            0x04 => Opcode::RLC_R8 { target: H },
+            0x05 => Opcode::RLC_R8 { target: L },
+            0x06 => Opcode::RLC_HL,
+            0x07 => Opcode::RLC_R8 { target: A },
+
+            0x08 => Opcode::RRC_R8 { target: B },
+            0x09 => Opcode::RRC_R8 { target: C },
+            0x0A => Opcode::RRC_R8 { target: D },
+            0x0B => Opcode::RRC_R8 { target: E },
+            0x0C => Opcode::RRC_R8 { target: H },
+            0x0D => Opcode::RRC_R8 { target: L },
+            0x0E => Opcode::RRC_HL,
+            0x0F => Opcode::RRC_R8 { target: A },
+
+            0x10 => Opcode::RL_R8 { target: B },
+            0x11 => Opcode::RL_R8 { target: C },
+            0x12 => Opcode::RL_R8 { target: D },
+            0x13 => Opcode::RL_R8 { target: E },
+            0x14 => Opcode::RL_R8 { target: H },
+            0x15 => Opcode::RL_R8 { target: L },
+            0x16 => Opcode::RL_HL,
+            0x17 => Opcode::RL_R8 { target: A },
+
+            0x18 => Opcode::RR_R8 { target: B },
+            0x19 => Opcode::RR_R8 { target: C },
+            0x1A => Opcode::RR_R8 { target: D },
+            0x1B => Opcode::RR_R8 { target: E },
+            0x1C => Opcode::RR_R8 { target: H },
+            0x1D => Opcode::RR_R8 { target: L },
+            0x1E => Opcode::RR_HL,
+            0x1F => Opcode::RR_R8 { target: A },
+
+            0x20 => Opcode::SLA_R8 { target: B },
+            0x21 => Opcode::SLA_R8 { target: C },
+            0x22 => Opcode::SLA_R8 { target: D },
+            0x23 => Opcode::SLA_R8 { target: E },
+            0x24 => Opcode::SLA_R8 { target: H },
+            0x25 => Opcode::SLA_R8 { target: L },
+            0x26 => Opcode::SLA_HL,
+            0x27 => Opcode::SLA_R8 { target: A },
+
+            0x28 => Opcode::SRA_R8 { target: B },
+            0x29 => Opcode::SRA_R8 { target: C },
+            0x2A => Opcode::SRA_R8 { target: D },
+            0x2B => Opcode::SRA_R8 { target: E },
+            0x2C => Opcode::SRA_R8 { target: H },
+            0x2D => Opcode::SRA_R8 { target: L },
+            0x2E => Opcode::SRA_HL,
+            0x2F => Opcode::SRA_R8 { target: A },
+
+            0x30 => Opcode::SWAP_R8 { target: B },
+            0x31 => Opcode::SWAP_R8 { target: C },
+            0x32 => Opcode::SWAP_R8 { target: D },
+            0x33 => Opcode::SWAP_R8 { target: E },
+            0x34 => Opcode::SWAP_R8 { target: H },
+            0x35 => Opcode::SWAP_R8 { target: L },
+            0x36 => Opcode::SWAP_HL,
+            0x37 => Opcode::SWAP_R8 { target: A },
+
+            0x38 => Opcode::SRL_R8 { target: B },
+            0x39 => Opcode::SRL_R8 { target: C },
+            0x3A => Opcode::SRL_R8 { target: D },
+            0x3B => Opcode::SRL_R8 { target: E },
+            0x3C => Opcode::SRL_R8 { target: H },
+            0x3D => Opcode::SRL_R8 { target: L },
+            0x3E => Opcode::SRL_HL,
+            0x3F => Opcode::SRL_R8 { target: A },
+
+            0x40 => Opcode::BIT_u3_R8 { bit: 0, target: B },
+            0x41 => Opcode::BIT_u3_R8 { bit: 0, target: C },
+            0x42 => Opcode::BIT_u3_R8 { bit: 0, target: D },
+            0x43 => Opcode::BIT_u3_R8 { bit: 0, target: E },
+            0x44 => Opcode::BIT_u3_R8 { bit: 0, target: H },
+            0x45 => Opcode::BIT_u3_R8 { bit: 0, target: L },
+            0x46 => Opcode::BIT_u3_HL { bit: 0 },
+            0x47 => Opcode::BIT_u3_R8 { bit: 0, target: A },
+            
+            0x48 => Opcode::BIT_u3_R8 { bit: 1, target: B },
+            0x49 => Opcode::BIT_u3_R8 { bit: 1, target: C },
+            0x4A => Opcode::BIT_u3_R8 { bit: 1, target: D },
+            0x4B => Opcode::BIT_u3_R8 { bit: 1, target: E },
+            0x4C => Opcode::BIT_u3_R8 { bit: 1, target: H },
+            0x4D => Opcode::BIT_u3_R8 { bit: 1, target: L },
+            0x4E => Opcode::BIT_u3_HL { bit: 1 },
+            0x4F => Opcode::BIT_u3_R8 { bit: 1, target: A },
+            
+            0x50 => Opcode::BIT_u3_R8 { bit: 2, target: B },
+            0x51 => Opcode::BIT_u3_R8 { bit: 2, target: C },
+            0x52 => Opcode::BIT_u3_R8 { bit: 2, target: D },
+            0x53 => Opcode::BIT_u3_R8 { bit: 2, target: E },
+            0x54 => Opcode::BIT_u3_R8 { bit: 2, target: H },
+            0x55 => Opcode::BIT_u3_R8 { bit: 2, target: L },
+            0x56 => Opcode::BIT_u3_HL { bit: 2 },
+            0x57 => Opcode::BIT_u3_R8 { bit: 2, target: A },
+            
+            0x58 => Opcode::BIT_u3_R8 { bit: 3, target: B },
+            0x59 => Opcode::BIT_u3_R8 { bit: 3, target: C },
+            0x5A => Opcode::BIT_u3_R8 { bit: 3, target: D },
+            0x5B => Opcode::BIT_u3_R8 { bit: 3, target: E },
+            0x5C => Opcode::BIT_u3_R8 { bit: 3, target: H },
+            0x5D => Opcode::BIT_u3_R8 { bit: 3, target: L },
+            0x5E => Opcode::BIT_u3_HL { bit: 3 },
+            0x5F => Opcode::BIT_u3_R8 { bit: 3, target: A },
+            
+            0x60 => Opcode::BIT_u3_R8 { bit: 4, target: B },
+            0x61 => Opcode::BIT_u3_R8 { bit: 4, target: C },
+            0x62 => Opcode::BIT_u3_R8 { bit: 4, target: D },
+            0x63 => Opcode::BIT_u3_R8 { bit: 4, target: E },
+            0x64 => Opcode::BIT_u3_R8 { bit: 4, target: H },
+            0x65 => Opcode::BIT_u3_R8 { bit: 4, target: L },
+            0x66 => Opcode::BIT_u3_HL { bit: 4 },
+            0x67 => Opcode::BIT_u3_R8 { bit: 4, target: A },
+            
+            0x68 => Opcode::BIT_u3_R8 { bit: 5, target: B },
+            0x69 => Opcode::BIT_u3_R8 { bit: 5, target: C },
+            0x6A => Opcode::BIT_u3_R8 { bit: 5, target: D },
+            0x6B => Opcode::BIT_u3_R8 { bit: 5, target: E },
+            0x6C => Opcode::BIT_u3_R8 { bit: 5, target: H },
+            0x6D => Opcode::BIT_u3_R8 { bit: 5, target: L },
+            0x6E => Opcode::BIT_u3_HL { bit: 5 },
+            0x6F => Opcode::BIT_u3_R8 { bit: 5, target: A },
+            
+            0x70 => Opcode::BIT_u3_R8 { bit: 6, target: B },
+            0x71 => Opcode::BIT_u3_R8 { bit: 6, target: C },
+            0x72 => Opcode::BIT_u3_R8 { bit: 6, target: D },
+            0x73 => Opcode::BIT_u3_R8 { bit: 6, target: E },
+            0x74 => Opcode::BIT_u3_R8 { bit: 6, target: H },
+            0x75 => Opcode::BIT_u3_R8 { bit: 6, target: L },
+            0x76 => Opcode::BIT_u3_HL { bit: 6 },
+            0x77 => Opcode::BIT_u3_R8 { bit: 6, target: A },
+            
+            0x78 => Opcode::BIT_u3_R8 { bit: 7, target: B },
+            0x79 => Opcode::BIT_u3_R8 { bit: 7, target: C },
+            0x7A => Opcode::BIT_u3_R8 { bit: 7, target: D },
+            0x7B => Opcode::BIT_u3_R8 { bit: 7, target: E },
+            0x7C => Opcode::BIT_u3_R8 { bit: 7, target: H },
+            0x7D => Opcode::BIT_u3_R8 { bit: 7, target: L },
+            0x7E => Opcode::BIT_u3_HL { bit: 7 },
+            0x7F => Opcode::BIT_u3_R8 { bit: 7, target: A },
+
+            0x80 => Opcode::RES_u3_R8 { bit: 0, target: B },
+            0x81 => Opcode::RES_u3_R8 { bit: 0, target: C },
+            0x82 => Opcode::RES_u3_R8 { bit: 0, target: D },
+            0x83 => Opcode::RES_u3_R8 { bit: 0, target: E },
+            0x84 => Opcode::RES_u3_R8 { bit: 0, target: H },
+            0x85 => Opcode::RES_u3_R8 { bit: 0, target: L },
+            0x86 => Opcode::RES_u3_HL { bit: 0 },
+            0x87 => Opcode::RES_u3_R8 { bit: 0, target: A },
+            
+            0x88 => Opcode::RES_u3_R8 { bit: 1, target: B },
+            0x89 => Opcode::RES_u3_R8 { bit: 1, target: C },
+            0x8A => Opcode::RES_u3_R8 { bit: 1, target: D },
+            0x8B => Opcode::RES_u3_R8 { bit: 1, target: E },
+            0x8C => Opcode::RES_u3_R8 { bit: 1, target: H },
+            0x8D => Opcode::RES_u3_R8 { bit: 1, target: L },
+            0x8E => Opcode::RES_u3_HL { bit: 1 },
+            0x8F => Opcode::RES_u3_R8 { bit: 1, target: A },
+            
+            0x90 => Opcode::RES_u3_R8 { bit: 2, target: B },
+            0x91 => Opcode::RES_u3_R8 { bit: 2, target: C },
+            0x92 => Opcode::RES_u3_R8 { bit: 2, target: D },
+            0x93 => Opcode::RES_u3_R8 { bit: 2, target: E },
+            0x94 => Opcode::RES_u3_R8 { bit: 2, target: H },
+            0x95 => Opcode::RES_u3_R8 { bit: 2, target: L },
+            0x96 => Opcode::RES_u3_HL { bit: 2 },
+            0x97 => Opcode::RES_u3_R8 { bit: 2, target: A },
+            
+            0x98 => Opcode::RES_u3_R8 { bit: 3, target: B },
+            0x99 => Opcode::RES_u3_R8 { bit: 3, target: C },
+            0x9A => Opcode::RES_u3_R8 { bit: 3, target: D },
+            0x9B => Opcode::RES_u3_R8 { bit: 3, target: E },
+            0x9C => Opcode::RES_u3_R8 { bit: 3, target: H },
+            0x9D => Opcode::RES_u3_R8 { bit: 3, target: L },
+            0x9E => Opcode::RES_u3_HL { bit: 3 },
+            0x9F => Opcode::RES_u3_R8 { bit: 3, target: A },
+            
+            0xA0 => Opcode::RES_u3_R8 { bit: 4, target: B },
+            0xA1 => Opcode::RES_u3_R8 { bit: 4, target: C },
+            0xA2 => Opcode::RES_u3_R8 { bit: 4, target: D },
+            0xA3 => Opcode::RES_u3_R8 { bit: 4, target: E },
+            0xA4 => Opcode::RES_u3_R8 { bit: 4, target: H },
+            0xA5 => Opcode::RES_u3_R8 { bit: 4, target: L },
+            0xA6 => Opcode::RES_u3_HL { bit: 4 },
+            0xA7 => Opcode::RES_u3_R8 { bit: 4, target: A },
+            
+            0xA8 => Opcode::RES_u3_R8 { bit: 5, target: B },
+            0xA9 => Opcode::RES_u3_R8 { bit: 5, target: C },
+            0xAA => Opcode::RES_u3_R8 { bit: 5, target: D },
+            0xAB => Opcode::RES_u3_R8 { bit: 5, target: E },
+            0xAC => Opcode::RES_u3_R8 { bit: 5, target: H },
+            0xAD => Opcode::RES_u3_R8 { bit: 5, target: L },
+            0xAE => Opcode::RES_u3_HL { bit: 5 },
+            0xAF => Opcode::RES_u3_R8 { bit: 5, target: A },
+            
+            0xB0 => Opcode::RES_u3_R8 { bit: 6, target: B },
+            0xB1 => Opcode::RES_u3_R8 { bit: 6, target: C },
+            0xB2 => Opcode::RES_u3_R8 { bit: 6, target: D },
+            0xB3 => Opcode::RES_u3_R8 { bit: 6, target: E },
+            0xB4 => Opcode::RES_u3_R8 { bit: 6, target: H },
+            0xB5 => Opcode::RES_u3_R8 { bit: 6, target: L },
+            0xB6 => Opcode::RES_u3_HL { bit: 6 },
+            0xB7 => Opcode::RES_u3_R8 { bit: 6, target: A },
+            
+            0xB8 => Opcode::RES_u3_R8 { bit: 7, target: B },
+            0xB9 => Opcode::RES_u3_R8 { bit: 7, target: C },
+            0xBA => Opcode::RES_u3_R8 { bit: 7, target: D },
+            0xBB => Opcode::RES_u3_R8 { bit: 7, target: E },
+            0xBC => Opcode::RES_u3_R8 { bit: 7, target: H },
+            0xBD => Opcode::RES_u3_R8 { bit: 7, target: L },
+            0xBE => Opcode::RES_u3_HL { bit: 7 },
+            0xBF => Opcode::RES_u3_R8 { bit: 7, target: A },
+            
+            0xC0 => Opcode::SET_u3_R8 { bit: 0, target: B },
+            0xC1 => Opcode::SET_u3_R8 { bit: 0, target: C },
+            0xC2 => Opcode::SET_u3_R8 { bit: 0, target: D },
+            0xC3 => Opcode::SET_u3_R8 { bit: 0, target: E },
+            0xC4 => Opcode::SET_u3_R8 { bit: 0, target: H },
+            0xC5 => Opcode::SET_u3_R8 { bit: 0, target: L },
+            0xC6 => Opcode::SET_u3_HL { bit: 0 },
+            0xC7 => Opcode::SET_u3_R8 { bit: 0, target: A },
+            
+            0xC8 => Opcode::SET_u3_R8 { bit: 1, target: B },
+            0xC9 => Opcode::SET_u3_R8 { bit: 1, target: C },
+            0xCA => Opcode::SET_u3_R8 { bit: 1, target: D },
+            0xCB => Opcode::SET_u3_R8 { bit: 1, target: E },
+            0xCC => Opcode::SET_u3_R8 { bit: 1, target: H },
+            0xCD => Opcode::SET_u3_R8 { bit: 1, target: L },
+            0xCE => Opcode::SET_u3_HL { bit: 1 },
+            0xCF => Opcode::SET_u3_R8 { bit: 1, target: A },
+            
+            0xD0 => Opcode::SET_u3_R8 { bit: 2, target: B },
+            0xD1 => Opcode::SET_u3_R8 { bit: 2, target: C },
+            0xD2 => Opcode::SET_u3_R8 { bit: 2, target: D },
+            0xD3 => Opcode::SET_u3_R8 { bit: 2, target: E },
+            0xD4 => Opcode::SET_u3_R8 { bit: 2, target: H },
+            0xD5 => Opcode::SET_u3_R8 { bit: 2, target: L },
+            0xD6 => Opcode::SET_u3_HL { bit: 2 },
+            0xD7 => Opcode::SET_u3_R8 { bit: 2, target: A },
+            
+            0xD8 => Opcode::SET_u3_R8 { bit: 3, target: B },
+            0xD9 => Opcode::SET_u3_R8 { bit: 3, target: C },
+            0xDA => Opcode::SET_u3_R8 { bit: 3, target: D },
+            0xDB => Opcode::SET_u3_R8 { bit: 3, target: E },
+            0xDC => Opcode::SET_u3_R8 { bit: 3, target: H },
+            0xDD => Opcode::SET_u3_R8 { bit: 3, target: L },
+            0xDE => Opcode::SET_u3_HL { bit: 3 },
+            0xDF => Opcode::SET_u3_R8 { bit: 3, target: A },
+            
+            0xE0 => Opcode::SET_u3_R8 { bit: 4, target: B },
+            0xE1 => Opcode::SET_u3_R8 { bit: 4, target: C },
+            0xE2 => Opcode::SET_u3_R8 { bit: 4, target: D },
+            0xE3 => Opcode::SET_u3_R8 { bit: 4, target: E },
+            0xE4 => Opcode::SET_u3_R8 { bit: 4, target: H },
+            0xE5 => Opcode::SET_u3_R8 { bit: 4, target: L },
+            0xE6 => Opcode::SET_u3_HL { bit: 4 },
+            0xE7 => Opcode::SET_u3_R8 { bit: 4, target: A },
+            
+            0xE8 => Opcode::SET_u3_R8 { bit: 5, target: B },
+            0xE9 => Opcode::SET_u3_R8 { bit: 5, target: C },
+            0xEA => Opcode::SET_u3_R8 { bit: 5, target: D },
+            0xEB => Opcode::SET_u3_R8 { bit: 5, target: E },
+            0xEC => Opcode::SET_u3_R8 { bit: 5, target: H },
+            0xED => Opcode::SET_u3_R8 { bit: 5, target: L },
+            0xEE => Opcode::SET_u3_HL { bit: 5 },
+            0xEF => Opcode::SET_u3_R8 { bit: 5, target: A },
+            
+            0xF0 => Opcode::SET_u3_R8 { bit: 6, target: B },
+            0xF1 => Opcode::SET_u3_R8 { bit: 6, target: C },
+            0xF2 => Opcode::SET_u3_R8 { bit: 6, target: D },
+            0xF3 => Opcode::SET_u3_R8 { bit: 6, target: E },
+            0xF4 => Opcode::SET_u3_R8 { bit: 6, target: H },
+            0xF5 => Opcode::SET_u3_R8 { bit: 6, target: L },
+            0xF6 => Opcode::SET_u3_HL { bit: 6 },
+            0xF7 => Opcode::SET_u3_R8 { bit: 6, target: A },
+            
+            0xF8 => Opcode::SET_u3_R8 { bit: 7, target: B },
+            0xF9 => Opcode::SET_u3_R8 { bit: 7, target: C },
+            0xFA => Opcode::SET_u3_R8 { bit: 7, target: D },
+            0xFB => Opcode::SET_u3_R8 { bit: 7, target: E },
+            0xFC => Opcode::SET_u3_R8 { bit: 7, target: H },
+            0xFD => Opcode::SET_u3_R8 { bit: 7, target: L },
+            0xFE => Opcode::SET_u3_HL { bit: 7 },
+            0xFF => Opcode::SET_u3_R8 { bit: 7, target: A },
         }
     }
 
@@ -681,6 +996,266 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, Cpu::has_half_borrow(n1, 1));
                 self.cpu.pc += 1;
                 return 12
+            },
+            Opcode::SET_u3_R8 { bit, target } => {
+                let mut value = self.cpu.read8(&target);
+                let mask = 1 << bit;
+                value |= mask;
+                self.cpu.write8(target, value);
+                self.cpu.pc += 2;
+                return 8
+            },
+            Opcode::SET_u3_HL { bit } => {
+                let mut value = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let mask = 1 << bit;
+                value |= mask;
+                self.memory.write(self.cpu.read16(&HL), value).unwrap();
+                self.cpu.pc += 2;
+                return 16
+            }
+            Opcode::RES_u3_R8 { bit, target } => {
+                let mut value = self.cpu.read8(&target);
+                let mask = !(1 << bit);
+                value &= mask;
+                self.cpu.write8(target, value);
+                self.cpu.pc += 2;
+                return 8
+            },
+            Opcode::RES_u3_HL { bit } => {
+                let mut value = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let mask = !(1 << bit);
+                value &= mask;
+                self.memory.write(self.cpu.read16(&HL), value).unwrap();
+                self.cpu.pc += 2;
+                return 16
+            }
+            Opcode::BIT_u3_R8 { bit, target } => {
+                let value = self.cpu.read8(&target);
+                self.cpu.set_flag(Flag::Z, ((value >> bit) & 1) == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, true);
+                self.cpu.pc += 2;
+                return 8
+            },
+            Opcode::BIT_u3_HL { bit } => {
+                let value = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                self.cpu.set_flag(Flag::Z, ((value >> bit) & 1) == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, true);
+                self.cpu.pc += 2;
+                return 12
+            },
+            Opcode::SWAP_R8 { target } => {
+                let mut value = self.cpu.read8(&target);
+                let initial_upper_byte = value >> 4;
+                let initial_lower_byte = value & 15;
+                value = initial_upper_byte | (initial_lower_byte << 4);
+                self.cpu.write8(target, value);
+                self.cpu.pc += 2;
+                return 8
+            },
+            Opcode::SWAP_HL => {
+                let mut value = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let initial_upper_byte = value >> 4;
+                let initial_lower_byte = value & 15;
+                value = initial_upper_byte | (initial_lower_byte << 4);
+                self.memory.write(self.cpu.read16(&HL), value).unwrap();
+                self.cpu.pc += 2;
+                return 16
+            },
+            Opcode::RLC_R8 { target } => {
+                let mut value = self.cpu.read8(&target);
+                let leading_bit = value >> 7;
+                value <<= 1;
+                value |= leading_bit;
+                self.cpu.write8(target, value);
+                
+                self.cpu.set_flag(Flag::Z, value == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, leading_bit == 1);
+                self.cpu.pc += 2;
+                return 8
+            },
+            Opcode::RLC_HL => {
+                let mut value = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let leading_bit = value >> 7;
+                value <<= 1;
+                value |= leading_bit;
+                self.memory.write(self.cpu.read16(&HL), value).unwrap();
+                
+                self.cpu.set_flag(Flag::Z, value == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, leading_bit == 1);
+                self.cpu.pc += 2;
+                return 16
+            },
+            Opcode::RRC_R8 { target } => {
+                let mut value = self.cpu.read8(&target);
+                let trailing_bit = value & 1;
+                value >>= 1;
+                value |= trailing_bit << 7;
+                self.cpu.write8(target, value);
+
+                self.cpu.set_flag(Flag::Z, value == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, trailing_bit == 1);
+                self.cpu.pc += 2;
+                return 8
+            },
+            Opcode::RRC_HL => {
+                let mut value = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let trailing_bit = value & 1;
+                value >>= 1;
+                value |= trailing_bit << 7;
+                self.memory.write(self.cpu.read16(&HL), value).unwrap();
+
+                self.cpu.set_flag(Flag::Z, value == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, trailing_bit == 1);
+                self.cpu.pc += 2;
+                return 16
+            },
+            Opcode::RL_R8 { target } => {
+                let mut value = self.cpu.read8(&target);
+                let leading_bit = value >> 7;
+                value <<= 1;
+                value |= self.cpu.get_flag(Flag::C);
+                self.cpu.write8(target, value);
+
+                self.cpu.set_flag(Flag::Z, value == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, leading_bit == 1);
+                self.cpu.pc += 2;
+                return 8
+            },
+            Opcode::RL_HL => {
+                let mut value = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let leading_bit = value >> 7;
+                value <<= 1;
+                value |= self.cpu.get_flag(Flag::C);
+                self.memory.write(self.cpu.read16(&HL), value).unwrap();
+
+                self.cpu.set_flag(Flag::Z, value == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, leading_bit == 1);
+                self.cpu.pc += 2;
+                return 16
+            },
+            Opcode::RR_R8 { target } => {
+                let mut value = self.cpu.read8(&target);
+                let trailing_bit = value & 1;
+                value >>= 1;
+                value |= self.cpu.get_flag(Flag::C) << 7;
+                self.cpu.write8(target, value);
+
+                self.cpu.set_flag(Flag::Z, value == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, trailing_bit == 1);
+                self.cpu.pc += 2;
+                return 8
+            },
+            Opcode::RR_HL => {
+                let mut value = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let trailing_bit = value & 1;
+                value >>= 1;
+                value |= self.cpu.get_flag(Flag::C) << 7;
+                self.memory.write(self.cpu.read16(&HL), value).unwrap();
+                
+                self.cpu.set_flag(Flag::Z, value == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, trailing_bit == 1);
+                self.cpu.pc += 2;
+                return 16
+            },
+            Opcode::SLA_R8 { target } => {
+                let mut value = self.cpu.read8(&target);
+                let leading_bit = value >> 7;
+                value <<= 1;
+                self.cpu.write8(target, value);
+
+                self.cpu.set_flag(Flag::Z, value == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, leading_bit == 1);
+                self.cpu.pc += 2;
+                return 8
+            },
+            Opcode::SLA_HL => {
+                let mut value = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let leading_bit = value >> 7;
+                value <<= 1;
+                self.memory.write(self.cpu.read16(&HL), value).unwrap();
+                
+                self.cpu.set_flag(Flag::Z, value == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, leading_bit == 1);
+                self.cpu.pc += 2;
+                return 16
+            },
+            Opcode::SRA_R8 { target } => {
+                let mut value = self.cpu.read8(&target);
+                let leading_bit = value & 0b1000_0000;
+                let trailing_bit = value & 1;
+                value >>= 1;
+                value |= leading_bit;
+                self.cpu.write8(target, value);
+
+                self.cpu.set_flag(Flag::Z, value == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, trailing_bit == 1);
+                self.cpu.pc += 2;
+                return 8
+            },
+            Opcode::SRA_HL => {
+                let mut value = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let leading_bit = value & 0b1000_0000;
+                let trailing_bit = value & 1;
+                value >>= 1;
+                value |= leading_bit;
+                self.memory.write(self.cpu.read16(&HL), value).unwrap();
+
+                self.cpu.set_flag(Flag::Z, value == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, trailing_bit == 1);
+                self.cpu.pc += 2;
+                return 16
+            },
+            Opcode::SRL_R8 { target } => {
+                let mut value = self.cpu.read8(&target);
+                let trailing_bit = value & 1;
+                value >>= 1;
+                self.cpu.write8(target, value);
+
+                self.cpu.set_flag(Flag::Z, value == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, trailing_bit == 1);
+                self.cpu.pc += 2;
+                return 8
+            },
+            Opcode::SRL_HL => {
+                let mut value = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let trailing_bit = value & 1;
+                value >>= 1;
+                self.memory.write(self.cpu.read16(&HL), value).unwrap();
+    
+                self.cpu.set_flag(Flag::Z, value == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, trailing_bit == 1);
+                self.cpu.pc += 2;
+                return 16
             },
         }
     }
