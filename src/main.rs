@@ -71,6 +71,11 @@ enum Opcode {
     PUSH_R16 { target: Register16 },
     RET,
     RET_cc { condition: Flag, set: bool },
+    CALL_n16,
+    CALL_cc_n16 { condition: Flag, set: bool },
+    JP_n16,
+    JP_cc_n16 { condition: Flag, set: bool },
+    JP_HL,
 }
 
 struct Gameboy {
@@ -84,6 +89,17 @@ impl Gameboy {
             cpu: Cpu::default(),
             memory: Memory::new()
         }
+    }
+
+    fn push(&mut self, value: u8) {
+        self.cpu.sp -= 1;
+        self.memory.write(self.cpu.sp, value).unwrap();
+    }
+
+    fn pop(&mut self) -> u8 {
+        let value = self.memory.read(self.cpu.sp).unwrap();
+        self.cpu.sp += 1;
+        value
     }
 
     fn run(&mut self) {
@@ -319,36 +335,36 @@ impl Gameboy {
 
             0xC0 => Opcode::RET_cc { condition: Flag::Z, set: false },
             0xC1 => Opcode::POP_R16 { target: BC },
-            0xC2 => todo!("JP NZ, a16"),
-            0xC3 => todo!("JP a16"),
-            0xC4 => todo!("CALL NZ, a16"),
+            0xC2 => Opcode::JP_cc_n16 { condition: Flag::Z, set: false },
+            0xC3 => Opcode::JP_n16,
+            0xC4 => Opcode::CALL_cc_n16 { condition: Flag::Z, set: false },
             0xC5 => Opcode::PUSH_R16 { target: BC },
             0xC6 => todo!("ADD A, N8"),
             0xC7 => todo!("RST $00"),
 
             0xC8 => Opcode::RET_cc { condition: Flag::Z, set: true },
             0xC9 => Opcode::RET,
-            0xCA => todo!("JP Z, a16"),
+            0xCA => Opcode::JP_cc_n16 { condition: Flag::Z, set: true },
             0xCB => self.fetch_prefixed_opcode(),
-            0xCC => todo!("CALL Z, a16"),
-            0xCD => todo!("CALL a16"),
+            0xCC => Opcode::CALL_cc_n16 { condition: Flag::Z, set: true },
+            0xCD => Opcode::CALL_n16,
             0xCE => todo!("ADC A, n8"),
             0xCF => todo!("RST $08"),
 
             0xD0 => Opcode::RET_cc { condition: Flag::C, set: false },
             0xD1 => Opcode::POP_R16 { target: DE },
-            0xD2 => todo!("JP NC, a16"),
+            0xD2 => Opcode::JP_cc_n16 { condition: Flag::C, set: false },
             0xD3 => panic!("Unknown opcode {:#X}", byte), 
-            0xD4 => todo!("CALL NC, a16"),
+            0xD4 => Opcode::CALL_cc_n16 { condition: Flag::C, set: false },
             0xD5 => Opcode::PUSH_R16 { target: DE },
             0xD6 => todo!("SUB A, n8"),
             0xD7 => todo!("RST $10"),
 
             0xD8 => Opcode::RET_cc { condition: Flag::C, set: true },
             0xD9 => todo!("RETI"),
-            0xDA => todo!("JP C, a16"),
+            0xDA => Opcode::JP_cc_n16 { condition: Flag::C, set: true },
             0xDB => panic!("Unknown opcode {:#X}", byte),
-            0xDC => todo!("CALL C, a16"),
+            0xDC => Opcode::CALL_cc_n16 { condition: Flag::C, set: true },
             0xDD => panic!("Unknown opcode {:#X}", byte),
             0xDE => todo!("SBC A, n8"),
             0xDF => todo!("RST $18"),
@@ -363,8 +379,8 @@ impl Gameboy {
             0xE7 => todo!("RST $20"),
 
             0xE8 => todo!("ADD SP, e8"),
-            0xE9 => todo!("JP HL"),
-            0xEA => todo!("LD [a16], A"),
+            0xE9 => Opcode::JP_HL,
+            0xEA => todo!("LD [n16], A"),
             0xEB => panic!("Unknown opcode {:#X}", byte),
             0xEC => panic!("Unknown opcode {:#X}", byte),
             0xED => panic!("Unknown opcode {:#X}", byte),
@@ -382,7 +398,7 @@ impl Gameboy {
 
             0xF8 => todo!("LD HL, SP + e8"),
             0xF9 => todo!("LD SP, HL"),
-            0xFA => todo!("LD A, [a16]"),
+            0xFA => todo!("LD A, [n16]"),
             0xFB => todo!("EI"),
             0xFC => panic!("Unknown opcode {:#X}", byte),
             0xFD => panic!("Unknown opcode {:#X}", byte),
@@ -1262,45 +1278,83 @@ impl Gameboy {
                 return 16
             },
             Opcode::POP_R16 { target } => {
-                let lower = self.memory.read(self.cpu.sp).unwrap();
-                self.cpu.sp += 1;
-                let upper = self.memory.read(self.cpu.sp).unwrap();
-                self.cpu.sp += 1;
+                let lower = self.pop();
+                let upper = self.pop();
                 self.cpu.write16(target, cpu::join_bytes(upper, lower));
                 self.cpu.pc += 1;
                 return 12
             },
             Opcode::PUSH_R16 { target } => {
                 let (upper, lower) = cpu::split_word(self.cpu.read16(&target));
-                self.cpu.sp -= 1;
-                self.memory.write(self.cpu.sp, upper).unwrap();
-                self.cpu.sp -= 1;
-                self.memory.write(self.cpu.sp, lower).unwrap();
+                self.push(upper);
+                self.push(lower);
                 self.cpu.pc += 1;
                 return 16
             },
             Opcode::RET => {
-                let lower = self.memory.read(self.cpu.sp).unwrap();
-                self.cpu.sp += 1;
-                let upper = self.memory.read(self.cpu.sp).unwrap();
+                // RET does not increment the PC. CALL will instead store the PC + 1;
+                let lower = self.pop();
+                let upper = self.pop();
                 self.cpu.sp += 1;
                 self.cpu.pc = cpu::join_bytes(upper, lower);
-                self.cpu.pc += 1;
                 return 16
             },
             Opcode::RET_cc { condition, set } => {
+                // RET_cc does not increment the PC. CALL will instead store the PC + 1;
                 let cc = self.cpu.get_flag(condition);
                 if (cc != 0) == set {
-                    let lower = self.memory.read(self.cpu.sp).unwrap();
-                    self.cpu.sp += 1;
-                    let upper = self.memory.read(self.cpu.sp).unwrap();
-                    self.cpu.sp += 1;
+                    let lower = self.pop();
+                    let upper = self.pop();
                     self.cpu.pc = cpu::join_bytes(upper, lower);
-                    self.cpu.pc += 1;
                     return 20
                 }
                 self.cpu.pc += 1;
                 return 8
+            },
+            Opcode::CALL_n16 => {
+                let addr_lower = self.memory.read(self.cpu.pc + 1).unwrap();
+                let addr_upper = self.memory.read(self.cpu.pc + 2).unwrap();
+                self.cpu.pc = cpu::join_bytes(addr_upper, addr_lower);
+                let (upper, lower) = cpu::split_word(self.cpu.pc + 1);
+                self.push(upper);
+                self.push(lower);
+                return 24
+            },
+            Opcode::CALL_cc_n16 { condition, set } => {
+                let addr_lower = self.memory.read(self.cpu.pc + 1).unwrap();
+                let addr_upper = self.memory.read(self.cpu.pc + 2).unwrap();
+                let (upper, lower) = cpu::split_word(self.cpu.pc + 1);
+                let cc = self.cpu.get_flag(condition);
+                if (cc != 0) == set {
+                    self.push(upper);
+                    self.push(lower);
+                    self.cpu.pc = cpu::join_bytes(addr_upper, addr_lower);
+                    return 24
+                }
+                self.cpu.pc += 3;
+                return 12
+            },
+            Opcode::JP_n16 => {
+                let addr_lower = self.memory.read(self.cpu.pc + 1).unwrap();
+                let addr_upper = self.memory.read(self.cpu.pc + 2).unwrap();
+                self.cpu.pc = cpu::join_bytes(addr_upper, addr_lower);
+                return 16
+            },
+            Opcode::JP_cc_n16 { condition, set } => {
+                let addr_lower = self.memory.read(self.cpu.pc + 1).unwrap();
+                let addr_upper = self.memory.read(self.cpu.pc + 2).unwrap();
+                let cc = self.cpu.get_flag(condition);
+                if (cc != 0) == set {
+                    self.cpu.pc = cpu::join_bytes(addr_upper, addr_lower);
+                    return 16
+                }
+                self.cpu.pc += 3;
+                return 12
+                
+            },
+            Opcode::JP_HL => {
+                self.cpu.pc = self.cpu.read16(&HL);
+                return 4
             },
         }
     }
