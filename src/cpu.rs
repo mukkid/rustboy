@@ -49,7 +49,7 @@ pub enum Flag {
 
 pub struct InvalidRegisterOperation;
 
-fn split_word(word: u16) -> (u8, u8) {
+pub fn split_word(word: u16) -> (u8, u8) {
     let high = (word >> 8) as u8;
     let low = (word & 0xFF) as u8;
     (high, low)

@@ -67,6 +67,10 @@ enum Opcode {
     SRA_HL,
     SRL_R8 { target: Register8 },
     SRL_HL,
+    POP_R16 { target: Register16 },
+    PUSH_R16 { target: Register16 },
+    RET,
+    RET_cc { condition: Flag, set: bool },
 }
 
 struct Gameboy {
@@ -313,17 +317,17 @@ impl Gameboy {
             0xBE => Opcode::CP_A_HL,
             0xBF => Opcode::CP_A_R { source: A },
 
-            0xC0 => todo!("RET NZ"),
-            0xC1 => todo!("POP BC"),
+            0xC0 => Opcode::RET_cc { condition: Flag::Z, set: false },
+            0xC1 => Opcode::POP_R16 { target: BC },
             0xC2 => todo!("JP NZ, a16"),
             0xC3 => todo!("JP a16"),
             0xC4 => todo!("CALL NZ, a16"),
-            0xC5 => todo!("PUSH BC"),
+            0xC5 => Opcode::PUSH_R16 { target: BC },
             0xC6 => todo!("ADD A, N8"),
             0xC7 => todo!("RST $00"),
 
-            0xC8 => todo!("RET Z"),
-            0xC9 => todo!("RET"),
+            0xC8 => Opcode::RET_cc { condition: Flag::Z, set: true },
+            0xC9 => Opcode::RET,
             0xCA => todo!("JP Z, a16"),
             0xCB => self.fetch_prefixed_opcode(),
             0xCC => todo!("CALL Z, a16"),
@@ -331,16 +335,16 @@ impl Gameboy {
             0xCE => todo!("ADC A, n8"),
             0xCF => todo!("RST $08"),
 
-            0xD0 => todo!("RET NC"),
-            0xD1 => todo!("POP DE"),
+            0xD0 => Opcode::RET_cc { condition: Flag::C, set: false },
+            0xD1 => Opcode::POP_R16 { target: DE },
             0xD2 => todo!("JP NC, a16"),
             0xD3 => panic!("Unknown opcode {:#X}", byte), 
             0xD4 => todo!("CALL NC, a16"),
-            0xD5 => todo!("PUSH DE"),
+            0xD5 => Opcode::PUSH_R16 { target: DE },
             0xD6 => todo!("SUB A, n8"),
             0xD7 => todo!("RST $10"),
 
-            0xD8 => todo!("RET C"),
+            0xD8 => Opcode::RET_cc { condition: Flag::C, set: true },
             0xD9 => todo!("RETI"),
             0xDA => todo!("JP C, a16"),
             0xDB => panic!("Unknown opcode {:#X}", byte),
@@ -350,11 +354,11 @@ impl Gameboy {
             0xDF => todo!("RST $18"),
 
             0xE0 => todo!("LDH [a8], A"),
-            0xE1 => todo!("POP HL"),
+            0xE1 => Opcode::POP_R16 { target: HL },
             0xE2 => todo!("LDH [C], A"),
             0xE3 => panic!("Unknown opcode {:#X}", byte),
             0xE4 => panic!("Unknown opcode {:#X}", byte),
-            0xE5 => todo!("PUSH HL"),
+            0xE5 => Opcode::PUSH_R16 { target: HL },
             0xE6 => todo!("AND A, n8"),
             0xE7 => todo!("RST $20"),
 
@@ -368,11 +372,11 @@ impl Gameboy {
             0xEF => todo!("RST $28"),
 
             0xF0 => todo!("LDH A, [a8]"),
-            0xF1 => todo!("POP AF"),
+            0xF1 => Opcode::POP_R16 { target: AF },
             0xF2 => todo!("LDH A, [C]"),
             0xF3 => todo!("DI"),
             0xF4 => panic!("Unknown opcode {:#X}", byte),
-            0xF5 => todo!("PUSH AF"),
+            0xF5 => Opcode::PUSH_R16 { target: AF },
             0xF6 => todo!("OR A, n8"),
             0xF7 => todo!("RST $30"),
 
@@ -1256,6 +1260,47 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::C, trailing_bit == 1);
                 self.cpu.pc += 2;
                 return 16
+            },
+            Opcode::POP_R16 { target } => {
+                let lower = self.memory.read(self.cpu.sp).unwrap();
+                self.cpu.sp += 1;
+                let upper = self.memory.read(self.cpu.sp).unwrap();
+                self.cpu.sp += 1;
+                self.cpu.write16(target, cpu::join_bytes(upper, lower));
+                self.cpu.pc += 1;
+                return 12
+            },
+            Opcode::PUSH_R16 { target } => {
+                let (upper, lower) = cpu::split_word(self.cpu.read16(&target));
+                self.cpu.sp -= 1;
+                self.memory.write(self.cpu.sp, upper).unwrap();
+                self.cpu.sp -= 1;
+                self.memory.write(self.cpu.sp, lower).unwrap();
+                self.cpu.pc += 1;
+                return 16
+            },
+            Opcode::RET => {
+                let lower = self.memory.read(self.cpu.sp).unwrap();
+                self.cpu.sp += 1;
+                let upper = self.memory.read(self.cpu.sp).unwrap();
+                self.cpu.sp += 1;
+                self.cpu.pc = cpu::join_bytes(upper, lower);
+                self.cpu.pc += 1;
+                return 16
+            },
+            Opcode::RET_cc { condition, set } => {
+                let cc = self.cpu.get_flag(condition);
+                if (cc != 0) == set {
+                    let lower = self.memory.read(self.cpu.sp).unwrap();
+                    self.cpu.sp += 1;
+                    let upper = self.memory.read(self.cpu.sp).unwrap();
+                    self.cpu.sp += 1;
+                    self.cpu.pc = cpu::join_bytes(upper, lower);
+                    self.cpu.pc += 1;
+                    return 20
+                }
+                self.cpu.pc += 1;
+                return 8
             },
         }
     }
