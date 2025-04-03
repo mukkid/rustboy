@@ -71,11 +71,36 @@ enum Opcode {
     PUSH_R16 { target: Register16 },
     RET,
     RET_cc { condition: Flag, set: bool },
+    RST { vct: u16 },
     CALL_n16,
     CALL_cc_n16 { condition: Flag, set: bool },
     JP_n16,
     JP_cc_n16 { condition: Flag, set: bool },
     JP_HL,
+    ADD_A_n8,
+    SUB_A_n8,
+    AND_A_n8,
+    OR_A_n8,
+    ADC_A_n8,
+    SBC_A_n8,
+    XOR_A_n8,
+    CP_A_n8,
+    JR_e8,
+    JR_cc_e8 { condition: Flag, set: bool },
+    LD_R16_A { target: Register16 },
+    LD_HLID_A { inc: bool }, // Combine HLI and HLD. if `inc` is true, run HLI. HLD otherwise
+    ADD_HL_R16 { target: Register16 },
+    ADD_HL_SP,
+    LD_A_R16 { target: Register16 },
+    LD_A_HLID { inc: bool },
+    LD_a16_SP,
+    LDH_a8_A,
+    LDH_c_A,
+    LDH_A_a8,
+    LDH_A_c,
+    LD_a16_A,
+    LD_A_a16,
+    ADD_SP_e8,
 }
 
 struct Gameboy {
@@ -119,16 +144,16 @@ impl Gameboy {
         match byte {
             0x00 => Opcode::NOP,
             0x01 => Opcode::LD_R16_N { target: BC },
-            0x02 => todo!("LD [BC], A"),
+            0x02 => Opcode::LD_R16_A { target: BC },
             0x03 => Opcode::INC_R16 { target: BC },
             0x04 => Opcode::INC_R8 { target: B },
             0x05 => Opcode::DEC_R8 { target: B },
             0x06 => Opcode::LD_R_N { target: B },
             0x07 => todo!("RLCA"),
             
-            0x08 => todo!("LD [a16], SP"),
-            0x09 => todo!("ADD HL, BC"),
-            0x0A => todo!("LD A, [BC]"),
+            0x08 => Opcode::LD_a16_SP,
+            0x09 => Opcode::ADD_HL_R16 { target: BC },
+            0x0A => Opcode::LD_A_R16 { target: BC },
             0x0B => Opcode::DEC_R16 { target: BC },
             0x0C => Opcode::INC_R8 { target: C },
             0x0D => Opcode::DEC_R8 { target: C },
@@ -137,52 +162,52 @@ impl Gameboy {
             
             0x10 => todo!("STOP n8"),
             0x11 => Opcode::LD_R16_N { target: DE },
-            0x12 => todo!("LD [DE], A"),
+            0x12 => Opcode::LD_R16_A { target: DE },
             0x13 => Opcode::INC_R16 { target: DE },
             0x14 => Opcode::INC_R8 { target: D },
             0x15 => Opcode::DEC_R8 { target: D },
             0x16 => Opcode::LD_R_N { target: D },
             0x17 => todo!("RLA"),
             
-            0x18 => todo!("JR e8"),
-            0x19 => todo!("AD HL, DE"),
-            0x1A => todo!("LD A, [DE]"),
+            0x18 => Opcode::JR_e8,
+            0x19 => Opcode::ADD_HL_R16 { target: DE },
+            0x1A => Opcode::LD_A_R16 { target: DE },
             0x1B => Opcode::DEC_R16 { target: DE },
             0x1C => Opcode::INC_R8 { target: E },
             0x1D => Opcode::DEC_R8 { target: E },
             0x1E => Opcode::LD_R_N { target: E },
             0x1F => todo!("RRA"),
             
-            0x20 => todo!("JR NZ, e8"),
+            0x20 => Opcode::JR_cc_e8 { condition: Flag::Z, set: false },
             0x21 => Opcode::LD_R16_N { target: HL },
-            0x22 => todo!("LD [HL+], A"),
+            0x22 => Opcode::LD_HLID_A { inc: true },
             0x23 => Opcode::INC_R16 { target: HL },
             0x24 => Opcode::INC_R8 { target: H },
             0x25 => Opcode::DEC_R8 { target: H },
             0x26 => Opcode::LD_R_N { target: H },
             0x27 => todo!("DAA"),
             
-            0x28 => todo!("JR Z, e8"),
-            0x29 => todo!("ADD HL, DE"),
-            0x2A => todo!("LD A, [HL+]"),
+            0x28 => Opcode::JR_cc_e8 { condition: Flag::Z, set: true },
+            0x29 => Opcode::ADD_HL_R16 { target: DE },
+            0x2A => Opcode::LD_A_HLID { inc: true },
             0x2B => Opcode::DEC_R16 { target: HL },
             0x2C => Opcode::INC_R8 { target: L },
             0x2D => Opcode::DEC_R8 { target: L },
             0x2E => Opcode::LD_R_N { target: L },
             0x2F => todo!("CPL"),
             
-            0x30 => todo!("JR NC, e8"),
+            0x30 => Opcode::JR_cc_e8 { condition: Flag::C, set: false },
             0x31 => Opcode::LD_R16_N { target: SP },
-            0x32 => todo!("LD [HL-], A"),
+            0x32 => Opcode::LD_HLID_A { inc: false },
             0x33 => Opcode::INC_R16 { target: SP },
             0x34 => Opcode::INC_HL,
             0x35 => Opcode::DEC_HL,
             0x36 => Opcode::LD_HL_N,
             0x37 => todo!("SCF"),
             
-            0x38 => todo!("JR C, e8"),
-            0x39 => todo!("ADD HL, SP"),
-            0x3A => todo!("LD A, [HL-]"),
+            0x38 => Opcode::JR_cc_e8 { condition: Flag::C, set: true },
+            0x39 => Opcode::ADD_HL_SP,
+            0x3A => Opcode::LD_A_HLID { inc: false },
             0x3B => Opcode::DEC_R16 { target: SP },
             0x3C => Opcode::INC_R8 { target: A },
             0x3D => Opcode::DEC_R8 { target: A },
@@ -339,8 +364,8 @@ impl Gameboy {
             0xC3 => Opcode::JP_n16,
             0xC4 => Opcode::CALL_cc_n16 { condition: Flag::Z, set: false },
             0xC5 => Opcode::PUSH_R16 { target: BC },
-            0xC6 => todo!("ADD A, N8"),
-            0xC7 => todo!("RST $00"),
+            0xC6 => Opcode::ADD_A_n8,
+            0xC7 => Opcode::RST { vct: 0x00 },
 
             0xC8 => Opcode::RET_cc { condition: Flag::Z, set: true },
             0xC9 => Opcode::RET,
@@ -348,8 +373,8 @@ impl Gameboy {
             0xCB => self.fetch_prefixed_opcode(),
             0xCC => Opcode::CALL_cc_n16 { condition: Flag::Z, set: true },
             0xCD => Opcode::CALL_n16,
-            0xCE => todo!("ADC A, n8"),
-            0xCF => todo!("RST $08"),
+            0xCE => Opcode::ADC_A_n8,
+            0xCF => Opcode::RST { vct: 0x08 },
 
             0xD0 => Opcode::RET_cc { condition: Flag::C, set: false },
             0xD1 => Opcode::POP_R16 { target: DE },
@@ -357,8 +382,8 @@ impl Gameboy {
             0xD3 => panic!("Unknown opcode {:#X}", byte), 
             0xD4 => Opcode::CALL_cc_n16 { condition: Flag::C, set: false },
             0xD5 => Opcode::PUSH_R16 { target: DE },
-            0xD6 => todo!("SUB A, n8"),
-            0xD7 => todo!("RST $10"),
+            0xD6 => Opcode::SUB_A_n8,
+            0xD7 => Opcode::RST { vct: 0x10 },
 
             0xD8 => Opcode::RET_cc { condition: Flag::C, set: true },
             0xD9 => todo!("RETI"),
@@ -366,44 +391,44 @@ impl Gameboy {
             0xDB => panic!("Unknown opcode {:#X}", byte),
             0xDC => Opcode::CALL_cc_n16 { condition: Flag::C, set: true },
             0xDD => panic!("Unknown opcode {:#X}", byte),
-            0xDE => todo!("SBC A, n8"),
-            0xDF => todo!("RST $18"),
+            0xDE => Opcode::SBC_A_n8,
+            0xDF => Opcode::RST { vct: 0x18 },
 
-            0xE0 => todo!("LDH [a8], A"),
+            0xE0 => Opcode::LDH_a8_A,
             0xE1 => Opcode::POP_R16 { target: HL },
-            0xE2 => todo!("LDH [C], A"),
+            0xE2 => Opcode::LDH_c_A,
             0xE3 => panic!("Unknown opcode {:#X}", byte),
             0xE4 => panic!("Unknown opcode {:#X}", byte),
             0xE5 => Opcode::PUSH_R16 { target: HL },
-            0xE6 => todo!("AND A, n8"),
-            0xE7 => todo!("RST $20"),
+            0xE6 => Opcode::AND_A_n8,
+            0xE7 => Opcode::RST { vct: 0x20 },
 
-            0xE8 => todo!("ADD SP, e8"),
+            0xE8 => Opcode::ADD_SP_e8,
             0xE9 => Opcode::JP_HL,
-            0xEA => todo!("LD [n16], A"),
+            0xEA => Opcode::LD_a16_A,
             0xEB => panic!("Unknown opcode {:#X}", byte),
             0xEC => panic!("Unknown opcode {:#X}", byte),
             0xED => panic!("Unknown opcode {:#X}", byte),
-            0xEE => todo!("XOR A, n8"),
-            0xEF => todo!("RST $28"),
+            0xEE => Opcode::XOR_A_n8,
+            0xEF => Opcode::RST { vct: 0x28 },
 
-            0xF0 => todo!("LDH A, [a8]"),
+            0xF0 => Opcode::LDH_A_a8,
             0xF1 => Opcode::POP_R16 { target: AF },
-            0xF2 => todo!("LDH A, [C]"),
+            0xF2 => Opcode::LDH_A_c,
             0xF3 => todo!("DI"),
             0xF4 => panic!("Unknown opcode {:#X}", byte),
             0xF5 => Opcode::PUSH_R16 { target: AF },
-            0xF6 => todo!("OR A, n8"),
-            0xF7 => todo!("RST $30"),
+            0xF6 => Opcode::OR_A_n8,
+            0xF7 => Opcode::RST { vct: 0x30 },
 
             0xF8 => todo!("LD HL, SP + e8"),
             0xF9 => todo!("LD SP, HL"),
-            0xFA => todo!("LD A, [n16]"),
+            0xFA => Opcode::LD_A_a16,
             0xFB => todo!("EI"),
             0xFC => panic!("Unknown opcode {:#X}", byte),
             0xFD => panic!("Unknown opcode {:#X}", byte),
-            0xFE => todo!("CP A, n8"),
-            0xFF => todo!("RST $38"),
+            0xFE => Opcode::CP_A_n8,
+            0xFF => Opcode::RST { vct: 0x38 },
         }
     }
 
@@ -1314,10 +1339,10 @@ impl Gameboy {
             Opcode::CALL_n16 => {
                 let addr_lower = self.memory.read(self.cpu.pc + 1).unwrap();
                 let addr_upper = self.memory.read(self.cpu.pc + 2).unwrap();
-                self.cpu.pc = cpu::join_bytes(addr_upper, addr_lower);
                 let (upper, lower) = cpu::split_word(self.cpu.pc + 1);
                 self.push(upper);
                 self.push(lower);
+                self.cpu.pc = cpu::join_bytes(addr_upper, addr_lower);
                 return 24
             },
             Opcode::CALL_cc_n16 { condition, set } => {
@@ -1355,6 +1380,275 @@ impl Gameboy {
             Opcode::JP_HL => {
                 self.cpu.pc = self.cpu.read16(&HL);
                 return 4
+            },
+            Opcode::RST { vct } => {
+                let (upper, lower) = cpu::split_word(self.cpu.pc + 1);
+                self.push(upper);
+                self.push(lower);
+                self.cpu.pc = vct;
+                return 16
+            },
+            Opcode::ADD_A_n8 => {
+                let n1 = self.cpu.read8(&A);
+                let n2 = self.memory.read(self.cpu.pc + 1).unwrap();
+                let (sum, c) = n1.overflowing_add(n2);
+                self.cpu.write8(A, sum);
+
+                self.cpu.set_flag(Flag::Z, sum == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1, n2));
+                self.cpu.set_flag(Flag::C, c);
+                self.cpu.pc += 2;
+                return 8
+            },
+            Opcode::ADC_A_n8 => {
+                let n1 = self.cpu.read8(&A);
+                let n2 = self.memory.read(self.cpu.pc + 1).unwrap();
+                let carry_flag = self.cpu.get_flag(Flag::C);
+                let (partial_sum, partial_c) = n1.overflowing_add(n2);
+                let (sum, c) = partial_sum.overflowing_add(carry_flag);
+                self.cpu.write8(A, sum);
+
+                self.cpu.set_flag(Flag::Z, sum == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1, n2));
+                self.cpu.set_flag(Flag::C, c || partial_c);
+                self.cpu.pc += 2;
+                return 8
+            },
+            Opcode::SUB_A_n8 => {
+                let n1 = self.cpu.read8(&A);
+                let n2 = self.memory.read(self.cpu.pc + 1).unwrap();
+                let (sum, c) = n1.overflowing_sub(n2);
+                self.cpu.write8(A, sum);
+
+                self.cpu.set_flag(Flag::Z, sum == 0);
+                self.cpu.set_flag(Flag::N, true);
+                self.cpu.set_flag(Flag::H, Cpu::has_half_borrow(n1, n2));
+                self.cpu.set_flag(Flag::C, c);
+                self.cpu.pc += 2;
+                return 8
+            },
+            Opcode::SBC_A_n8 => {
+                let n1 = self.cpu.read8(&A);
+                let n2 = self.memory.read(self.cpu.pc + 1).unwrap();
+                let carry_flag = self.cpu.get_flag(Flag::C);
+                let (partial_sum, partial_c) = n1.overflowing_sub(n2);
+                let (sum, c) = partial_sum.overflowing_sub(carry_flag);
+                self.cpu.write8(A, sum);
+
+                self.cpu.set_flag(Flag::Z, sum == 0);
+                self.cpu.set_flag(Flag::N, true);
+                self.cpu.set_flag(Flag::H, Cpu::has_half_borrow(n1, n2) || Cpu::has_half_borrow(partial_sum, carry_flag));
+                self.cpu.set_flag(Flag::C, c || partial_c);
+                self.cpu.pc += 2;
+                return 8
+            },
+            Opcode::AND_A_n8 => {
+                let n1 = self.cpu.read8(&A);
+                let n2 = self.memory.read(self.cpu.pc + 1).unwrap();
+                let value = n1 & n2;
+                self.cpu.write8(A, value);
+
+                self.cpu.set_flag(Flag::Z, value == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, true);
+                self.cpu.set_flag(Flag::C, false);
+                self.cpu.pc += 2;
+                return 8
+            },
+            Opcode::XOR_A_n8 => {
+                let n1 = self.cpu.read8(&A);
+                let n2 = self.memory.read(self.cpu.pc + 1).unwrap();
+                let value = n1 ^ n2;
+                self.cpu.write8(A, value);
+
+                self.cpu.set_flag(Flag::Z, value == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, false);
+                self.cpu.pc += 2;
+                return 8
+            },
+            Opcode::OR_A_n8 => {
+                let n1 = self.cpu.read8(&A);
+                let n2 = self.memory.read(self.cpu.pc + 1).unwrap();
+                let value = n1 | n2;
+                self.cpu.write8(A, value);
+
+                self.cpu.set_flag(Flag::Z, value == 0);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, false);
+                self.cpu.pc += 2;
+                return 8
+            },
+            Opcode::CP_A_n8 => {
+                let n1 = self.cpu.read8(&A);
+                let n2 = self.memory.read(self.cpu.pc + 1).unwrap();
+                let (sum, c) = n1.overflowing_sub(n2);
+
+                self.cpu.set_flag(Flag::Z, sum == 0);
+                self.cpu.set_flag(Flag::N, true);
+                self.cpu.set_flag(Flag::H, Cpu::has_half_borrow(n1, n2));
+                self.cpu.set_flag(Flag::C, c);
+                self.cpu.pc += 2;
+                return 8
+            },
+            Opcode::JR_e8 => {
+                let rel_addr: i16 = self.memory.read(self.cpu.pc).unwrap() as i16;
+                let temp_pc = self.cpu.pc as i16;
+                let new_addr = temp_pc + rel_addr;
+                self.cpu.pc = new_addr as u16;
+                return 12 
+            },
+            Opcode::JR_cc_e8 { condition, set } => {
+                let cc = self.cpu.get_flag(condition);
+                if (cc != 0) == set {
+                    let rel_addr: i16 = self.memory.read(self.cpu.pc).unwrap() as i16;
+                    let temp_pc = self.cpu.pc as i16;
+                    let new_addr = temp_pc + rel_addr;
+                    self.cpu.pc = new_addr as u16;
+                    return 12                     
+                }
+                self.cpu.pc += 2;
+                return 8
+            },
+            Opcode::LD_R16_A { target } => {
+                let value = self.cpu.read8(&A);
+                self.memory.write(self.cpu.read16(&target), value).unwrap();
+                self.cpu.pc += 1;
+                return 8
+            },
+            Opcode::LD_HLID_A { inc } => {
+                let value = self.cpu.read8(&A);
+                let target = self.cpu.read16(&HL);
+                self.memory.write(target, value).unwrap();
+                if inc {
+                    self.cpu.write16(HL, target.wrapping_add(1));
+                } else {
+                    self.cpu.write16(HL, target.wrapping_sub(1));
+                }
+                self.cpu.pc += 1;
+                return 8
+            },
+            Opcode::ADD_HL_R16 { target } => {
+                let n1 = self.cpu.read16(&HL);
+                let n2 = self.cpu.read16(&target);
+                let (value, carry) = n1.overflowing_add(n2);
+                self.cpu.write16(HL, value);
+
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1 as u8, n2 as u8));
+                self.cpu.set_flag(Flag::C, carry);
+                self.cpu.pc += 1;
+                return 8
+            },
+            Opcode::ADD_HL_SP => {
+                let n1 = self.cpu.read16(&HL);
+                let (value, carry) = n1.overflowing_add(self.cpu.sp);
+                self.cpu.write16(HL, value);
+                
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1 as u8, self.cpu.sp as u8));
+                self.cpu.set_flag(Flag::C, carry);
+                self.cpu.pc += 1;
+                return 8
+            },
+            Opcode::LD_A_R16 { target } => {
+                let value = self.memory.read(self.cpu.read16(&target)).unwrap();
+                self.cpu.write8(A, value);
+                self.cpu.pc += 1;
+                return 8
+            },
+            Opcode::LD_A_HLID { inc } => {
+                let target = self.cpu.read16(&HL);
+                let value = self.memory.read(target).unwrap();
+                self.cpu.write8(A, value);
+                if inc {
+                    self.cpu.write16(HL, target.wrapping_add(1));
+                } else {
+                    self.cpu.write16(HL, target.wrapping_sub(1));
+                }
+                self.cpu.pc += 1;
+                return 8
+            },
+            Opcode::LD_a16_SP => {
+                let low = self.memory.read(self.cpu.pc + 1).unwrap();
+                let high = self.memory.read(self.cpu.pc + 2).unwrap();
+                let target = cpu::join_bytes(high, low);
+                self.memory.write(target, self.cpu.sp as u8).unwrap();
+                self.memory.write(target + 1, (self.cpu.sp >> 8) as u8).unwrap();
+                self.cpu.pc += 3;
+                return 20
+            }
+            Opcode::LDH_a8_A => {
+                let value = self.cpu.read8(&A);
+                let target = self.memory.read(self.cpu.pc + 1).unwrap() as u16;
+                self.memory.write(target + 0xFF, value).unwrap();
+                self.cpu.pc += 2;
+                return 12
+            },
+            Opcode::LDH_A_a8 => {
+                let target = self.memory.read(self.cpu.pc + 1).unwrap() as u16;
+                let value = self.memory.read(target + 0xFF).unwrap();
+                self.cpu.write8(A, value);
+                self.cpu.pc += 2;
+                return 12
+            },
+            Opcode::LDH_c_A => {
+                let value = self.cpu.read8(&A);
+                let target = self.cpu.read8(&C) as u16 + 0xFF;
+                self.memory.write(target, value).unwrap();
+                self.cpu.pc += 1;
+                return 8
+            },
+            Opcode::LDH_A_c => {
+                let target = self.cpu.read8(&C) as u16 + 0xFF;   
+                let value = self.memory.read(target).unwrap();
+                self.cpu.write8(A, value);
+                self.cpu.pc += 1;
+                return 8
+            },
+            Opcode::LD_a16_A => {
+                let low = self.memory.read(self.cpu.pc + 1).unwrap();
+                let high = self.memory.read(self.cpu.pc + 2).unwrap();
+                let target = cpu::join_bytes(high, low);
+                let value = self.cpu.read8(&A);
+                self.memory.write(target, value).unwrap();
+                self.cpu.pc += 3;
+                return 16
+            },
+            Opcode::LD_A_a16 => {
+                let low = self.memory.read(self.cpu.pc + 1).unwrap();
+                let high = self.memory.read(self.cpu.pc + 2).unwrap();
+                let source = cpu::join_bytes(high, low);
+                let value = self.memory.read(source).unwrap();
+                self.cpu.write8(A, value);
+                self.cpu.pc += 3;
+                return 16
+            },
+            Opcode::ADD_SP_e8 => {
+                let n1 = self.memory.read(self.cpu.sp + 1).unwrap();
+                let n1_3b = n1 & 0x08;
+                let n2_3b = self.cpu.sp as u8 & 0x08;
+                
+                let n1_7b = n1 & 0x80;
+                let n2_7b = self.cpu.sp as u8 & 0x80;
+                self.cpu.sp = (self.cpu.sp as i16 + n1 as i16) as u16;
+                
+                let target_3b = self.cpu.sp as u8 & 0x08;
+                let target_7b = self.cpu.sp as u8 & 0x80;
+                let overflow3 = (n1_3b == n2_3b) && (target_3b != n1_3b);
+                let overflow7 = (n1_7b == n2_7b) && (target_7b != n1_7b);
+
+                self.cpu.set_flag(Flag::Z, false);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, overflow3);
+                self.cpu.set_flag(Flag::C, overflow7);
+
+                self.cpu.pc += 2;
+                return 16
             },
         }
     }
