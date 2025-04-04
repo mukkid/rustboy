@@ -10,6 +10,7 @@ pub struct Cpu {
     pub l: u8,
     pub pc: u16,
     pub sp: u16,
+    pub ime: bool,
 }
 
 #[derive(Debug)]

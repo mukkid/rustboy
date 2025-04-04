@@ -101,6 +101,19 @@ enum Opcode {
     LD_a16_A,
     LD_A_a16,
     ADD_SP_e8,
+    LD_HL_SPe8,
+    LD_SP_HL,
+    RLCA,
+    RRCA,
+    RLA,
+    RRA,
+    DAA,
+    CPL,
+    SCF,
+    CCF,
+    RETI,
+    DI,
+    EI,
 }
 
 struct Gameboy {
@@ -149,7 +162,7 @@ impl Gameboy {
             0x04 => Opcode::INC_R8 { target: B },
             0x05 => Opcode::DEC_R8 { target: B },
             0x06 => Opcode::LD_R_N { target: B },
-            0x07 => todo!("RLCA"),
+            0x07 => Opcode::RLCA,
             
             0x08 => Opcode::LD_a16_SP,
             0x09 => Opcode::ADD_HL_R16 { target: BC },
@@ -158,16 +171,16 @@ impl Gameboy {
             0x0C => Opcode::INC_R8 { target: C },
             0x0D => Opcode::DEC_R8 { target: C },
             0x0E => Opcode::LD_R_N { target: C },
-            0x0F => todo!("RRCA"),
+            0x0F => Opcode::RRCA,
             
-            0x10 => todo!("STOP n8"),
+            0x10 => panic!("I stopped"), // todo!("STOP n8")
             0x11 => Opcode::LD_R16_N { target: DE },
             0x12 => Opcode::LD_R16_A { target: DE },
             0x13 => Opcode::INC_R16 { target: DE },
             0x14 => Opcode::INC_R8 { target: D },
             0x15 => Opcode::DEC_R8 { target: D },
             0x16 => Opcode::LD_R_N { target: D },
-            0x17 => todo!("RLA"),
+            0x17 => Opcode::RLA,
             
             0x18 => Opcode::JR_e8,
             0x19 => Opcode::ADD_HL_R16 { target: DE },
@@ -176,7 +189,7 @@ impl Gameboy {
             0x1C => Opcode::INC_R8 { target: E },
             0x1D => Opcode::DEC_R8 { target: E },
             0x1E => Opcode::LD_R_N { target: E },
-            0x1F => todo!("RRA"),
+            0x1F => Opcode::RRA,
             
             0x20 => Opcode::JR_cc_e8 { condition: Flag::Z, set: false },
             0x21 => Opcode::LD_R16_N { target: HL },
@@ -185,7 +198,7 @@ impl Gameboy {
             0x24 => Opcode::INC_R8 { target: H },
             0x25 => Opcode::DEC_R8 { target: H },
             0x26 => Opcode::LD_R_N { target: H },
-            0x27 => todo!("DAA"),
+            0x27 => Opcode::DAA,
             
             0x28 => Opcode::JR_cc_e8 { condition: Flag::Z, set: true },
             0x29 => Opcode::ADD_HL_R16 { target: DE },
@@ -194,7 +207,7 @@ impl Gameboy {
             0x2C => Opcode::INC_R8 { target: L },
             0x2D => Opcode::DEC_R8 { target: L },
             0x2E => Opcode::LD_R_N { target: L },
-            0x2F => todo!("CPL"),
+            0x2F => Opcode::CPL,
             
             0x30 => Opcode::JR_cc_e8 { condition: Flag::C, set: false },
             0x31 => Opcode::LD_R16_N { target: SP },
@@ -203,7 +216,7 @@ impl Gameboy {
             0x34 => Opcode::INC_HL,
             0x35 => Opcode::DEC_HL,
             0x36 => Opcode::LD_HL_N,
-            0x37 => todo!("SCF"),
+            0x37 => Opcode::SCF,
             
             0x38 => Opcode::JR_cc_e8 { condition: Flag::C, set: true },
             0x39 => Opcode::ADD_HL_SP,
@@ -212,7 +225,7 @@ impl Gameboy {
             0x3C => Opcode::INC_R8 { target: A },
             0x3D => Opcode::DEC_R8 { target: A },
             0x3E => Opcode::LD_R_N { target: A },
-            0x3F => todo!("CCF"),
+            0x3F => Opcode::CCF,
 
             0x40 => Opcode::LD_R_R { target: B, source: B },
             0x41 => Opcode::LD_R_R { target: B, source: C },
@@ -386,7 +399,7 @@ impl Gameboy {
             0xD7 => Opcode::RST { vct: 0x10 },
 
             0xD8 => Opcode::RET_cc { condition: Flag::C, set: true },
-            0xD9 => todo!("RETI"),
+            0xD9 => Opcode::RETI,
             0xDA => Opcode::JP_cc_n16 { condition: Flag::C, set: true },
             0xDB => panic!("Unknown opcode {:#X}", byte),
             0xDC => Opcode::CALL_cc_n16 { condition: Flag::C, set: true },
@@ -415,16 +428,16 @@ impl Gameboy {
             0xF0 => Opcode::LDH_A_a8,
             0xF1 => Opcode::POP_R16 { target: AF },
             0xF2 => Opcode::LDH_A_c,
-            0xF3 => todo!("DI"),
+            0xF3 => Opcode::DI,
             0xF4 => panic!("Unknown opcode {:#X}", byte),
             0xF5 => Opcode::PUSH_R16 { target: AF },
             0xF6 => Opcode::OR_A_n8,
             0xF7 => Opcode::RST { vct: 0x30 },
 
-            0xF8 => todo!("LD HL, SP + e8"),
-            0xF9 => todo!("LD SP, HL"),
+            0xF8 => Opcode::LD_HL_SPe8,
+            0xF9 => Opcode::LD_SP_HL,
             0xFA => Opcode::LD_A_a16,
-            0xFB => todo!("EI"),
+            0xFB => Opcode::EI,
             0xFC => panic!("Unknown opcode {:#X}", byte),
             0xFD => panic!("Unknown opcode {:#X}", byte),
             0xFE => Opcode::CP_A_n8,
@@ -1629,7 +1642,7 @@ impl Gameboy {
                 return 16
             },
             Opcode::ADD_SP_e8 => {
-                let n1 = self.memory.read(self.cpu.sp + 1).unwrap();
+                let n1 = self.memory.read(self.cpu.pc + 1).unwrap();
                 let n1_3b = n1 & 0x08;
                 let n2_3b = self.cpu.sp as u8 & 0x08;
                 
@@ -1649,6 +1662,155 @@ impl Gameboy {
 
                 self.cpu.pc += 2;
                 return 16
+            },
+            Opcode::LD_HL_SPe8 => {
+                let n1 = self.memory.read(self.cpu.pc + 1).unwrap();
+                let target = (self.cpu.sp as i16 + n1 as i16) as u16;
+                
+                let n1_3b = n1 & 0x08;
+                let n2_3b = self.cpu.sp as u8 & 0x08;
+                let n1_7b = n1 & 0x80;
+                let n2_7b = self.cpu.sp as u8 & 0x80;
+                let target_3b = target as u8 & 0x08;
+                let target_7b = target as u8 & 0x80;
+                
+                let overflow3 = (n1_3b == n2_3b) && (target_3b != n1_3b);
+                let overflow7 = (n1_7b == n2_7b) && (target_7b != n1_7b);
+                
+                self.cpu.set_flag(Flag::Z, false);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, overflow3);
+                self.cpu.set_flag(Flag::C, overflow7);
+                self.cpu.pc += 2;
+                return 12
+            }
+            Opcode::LD_SP_HL => {
+                self.cpu.sp = self.cpu.read16(&HL);
+                self.cpu.pc += 1;
+                return 8
+            },
+            Opcode::RLCA => {
+                let mut value = self.cpu.read8(&A);
+                let leading_bit = value >> 7;
+                value <<= 1;
+                value |= leading_bit;
+                self.cpu.write8(A, value);
+                
+                self.cpu.set_flag(Flag::Z, false);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, leading_bit == 1);
+                self.cpu.pc += 1;
+                return 4
+            },
+            Opcode::RRCA => {
+                let mut value = self.cpu.read8(&A);
+                let trailing_bit = value & 1;
+                value >>= 1;
+                value |= trailing_bit << 7;
+                self.cpu.write8(A, value);
+
+                self.cpu.set_flag(Flag::Z, false);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, trailing_bit == 1);
+                self.cpu.pc += 1;
+                return 4
+            },
+            Opcode::RLA => {
+                let mut value = self.cpu.read8(&A);
+                let leading_bit = value >> 7;
+                value <<= 1;
+                value |= self.cpu.get_flag(Flag::C);
+                self.cpu.write8(A, value);
+
+                self.cpu.set_flag(Flag::Z, false);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, leading_bit == 1);
+                self.cpu.pc += 1;
+                return 4
+            },
+            Opcode::RRA => {
+                let mut value = self.cpu.read8(&A);
+                let trailing_bit = value & 1;
+                value >>= 1;
+                value |= self.cpu.get_flag(Flag::C) << 7;
+                self.cpu.write8(A, value);
+
+                self.cpu.set_flag(Flag::Z, false);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, trailing_bit == 1);
+                self.cpu.pc += 1;
+                return 4
+            },
+            Opcode::DAA => {
+                let target = self.cpu.read8(&A);
+                let mut adj = 0;
+                if self.cpu.get_flag(Flag::N) == 1 {
+                    if self.cpu.get_flag(Flag::H) == 1 {
+                        adj += 0x6;
+                    }
+                    if self.cpu.get_flag(Flag::C) == 1{
+                        adj += 0x60;
+                    }
+                    adj = target - adj;
+                } else {
+                    if self.cpu.get_flag(Flag::H) == 1 || target & 0xF > 0x9 {
+                        adj += 0x6;
+                    }
+                    if self.cpu.get_flag(Flag::C) == 1 || target > 0x99 {
+                        adj += 0x60;
+                        self.cpu.set_flag(Flag::C, true);
+                    }
+                    adj = target + adj;
+                }
+                self.cpu.write8(A, adj);
+                self.cpu.set_flag(Flag::Z, adj == 0);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.pc += 1;
+                return 4
+            },
+            Opcode::CPL => {
+                self.cpu.write8(A, !self.cpu.read8(&A));
+                self.cpu.set_flag(Flag::N, true);
+                self.cpu.set_flag(Flag::H, true);
+                self.cpu.pc += 1;
+                return 4
+            }
+            Opcode::SCF => {
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, true);
+                self.cpu.pc += 1;
+                return 4
+            },
+            Opcode::CCF => {
+                let c = self.cpu.get_flag(Flag::C);
+                self.cpu.set_flag(Flag::N, false);
+                self.cpu.set_flag(Flag::H, false);
+                self.cpu.set_flag(Flag::C, c == 0);
+                self.cpu.pc += 1;
+                return 4
+            },
+            Opcode::RETI => {
+                let lower = self.pop();
+                let upper = self.pop();
+                self.cpu.sp += 1;
+                self.cpu.pc = cpu::join_bytes(upper, lower);
+                self.cpu.ime = true;
+                return 16
+            },
+            Opcode::DI => {
+                self.cpu.ime = false;
+                self.cpu.pc += 1;
+                return 4
+            },
+            Opcode::EI => {
+                self.cpu.ime = true;
+                self.cpu.pc += 1;
+                return 4
             },
         }
     }
