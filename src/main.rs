@@ -1,4 +1,5 @@
 mod cpu;
+mod graphics;
 mod memory;
 
 use cpu::Cpu;
@@ -6,10 +7,13 @@ use cpu::{Register8, Register16, Flag};
 use cpu::Register8::*;
 use cpu::Register16::*;
 
+
 use memory::Memory;
+
 
 fn main() {
     let mut gb = Gameboy::new();
+    graphics::start_screen();
     gb.run();
 }
 
@@ -118,14 +122,14 @@ enum Opcode {
 
 struct Gameboy {
     cpu: Cpu,
-    memory: Memory
+    memory: Memory,
 }
 
 impl Gameboy {
     fn new() -> Self{
         Self {
             cpu: Cpu::default(),
-            memory: Memory::new()
+            memory: Memory::new(),
         }
     }
 
