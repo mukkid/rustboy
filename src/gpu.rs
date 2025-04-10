@@ -1,13 +1,9 @@
-use std::cell::RefCell;
-
-use crate::Memory;
-
-
-pub struct Gpu {
+pub struct Gpu<'a> {
     pub gpu_mode: GpuMode,
-    memory: RefCell<Memory>,
     cycles: i32,
     line: u8,
+    vram: &'a [u8],
+    oam: &'a [u8],
     frame_buffer: [u8; 160 * 144] // 160x144 screen resolution
 }
 
@@ -18,10 +14,11 @@ pub enum GpuMode {
     Drawing,
 }
 
-impl Gpu {
-    pub fn new(memory: RefCell<Memory>) -> Self {
+impl<'a> Gpu<'a> {
+    pub fn new(vram: &'a [u8], oam: &'a [u8]) -> Self {
         Self {
-            memory,
+            vram,
+            oam,
             gpu_mode: GpuMode::OamScan,
             cycles: 0,
             line: 0,
