@@ -1,3 +1,6 @@
+use thiserror::Error;
+
+#[derive(Clone)]
 pub struct Memory {
     pub rom: [u8; 0x8000],
     pub vram: [u8; 0x2000],
@@ -9,7 +12,8 @@ pub struct Memory {
     pub interrupt_enable: u8,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
+#[error("Invalid memory reached")]
 pub struct MemoryAddressError;
 
 impl Memory {

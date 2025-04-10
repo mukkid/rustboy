@@ -1,20 +1,21 @@
 mod cpu;
-mod graphics;
+mod gpu;
 mod memory;
+
+use std::cell::RefCell;
 
 use cpu::Cpu;
 use cpu::{Register8, Register16, Flag};
 use cpu::Register8::*;
 use cpu::Register16::*;
-
-
+use gpu::Gpu;
 use memory::Memory;
 
+use anyhow::Result;
 
 fn main() {
     let mut gb = Gameboy::new();
-    graphics::start_screen();
-    gb.run();
+    let _ = gb.run();
 }
 
 #[allow(non_camel_case_types)]
@@ -122,42 +123,49 @@ enum Opcode {
 
 struct Gameboy {
     cpu: Cpu,
-    memory: Memory,
+    memory: RefCell<Memory>,
+    gpu: Gpu,
 }
 
 impl Gameboy {
     fn new() -> Self{
+        let cpu = Cpu::default();
+        let memory = RefCell::new(Memory::new());
+        let gpu = Gpu::new(memory.clone());
         Self {
-            cpu: Cpu::default(),
-            memory: Memory::new(),
+            cpu, 
+            gpu,
+            memory,
         }
     }
 
-    fn push(&mut self, value: u8) {
+    fn push(&mut self, value: u8) -> Result<()> {
         self.cpu.sp -= 1;
-        self.memory.write(self.cpu.sp, value).unwrap();
+        self.memory.borrow_mut().write(self.cpu.sp, value)?;
+        Ok(())
     }
 
-    fn pop(&mut self) -> u8 {
-        let value = self.memory.read(self.cpu.sp).unwrap();
+    fn pop(&mut self) -> Result<u8> {
+        let value = self.memory.borrow().read(self.cpu.sp)?;
         self.cpu.sp += 1;
-        value
+        Ok(value)
     }
 
-    fn run(&mut self) {
+    fn run(&mut self) -> Result<()> {
         loop {
-            self.run_single_opcode();
+            let cycles_elapsed = self.run_single_opcode()?;
+            self.gpu.step(cycles_elapsed);
             todo!("timer wait accounting for clock, instruction cycles, and draw buffer");
         }
     }
 
-    fn run_single_opcode(&mut self) {
+    fn run_single_opcode(&mut self) -> Result<i32> {
         let opcode = self.fetch_opcode();
-        self.execute(opcode);
+        self.execute(opcode)
     }
 
     fn fetch_opcode(&self) -> Opcode {
-        let byte = self.memory.read(self.cpu.pc).unwrap();
+        let byte = self.memory.borrow().read(self.cpu.pc).unwrap();
         match byte {
             0x00 => Opcode::NOP,
             0x01 => Opcode::LD_R16_N { target: BC },
@@ -450,7 +458,7 @@ impl Gameboy {
     }
 
     fn fetch_prefixed_opcode(&self) -> Opcode {
-        let byte = self.memory.read(self.cpu.pc + 1).unwrap();
+        let byte = self.memory.borrow().read(self.cpu.pc + 1).unwrap();
         match byte {
             0x00 => Opcode::RLC_R8 { target: B },
             0x01 => Opcode::RLC_R8 { target: C },
@@ -742,11 +750,11 @@ impl Gameboy {
         }
     }
 
-    fn execute(&mut self, opcode: Opcode) -> i32 {
+    fn execute(&mut self, opcode: Opcode) -> Result<i32> {
         match opcode {
             Opcode::NOP => {
                 self.cpu.pc += 1;
-                return 4
+                Ok(4)
             },
             Opcode::HALT => {
                 panic!("Received HALT Opcode");
@@ -755,19 +763,19 @@ impl Gameboy {
                 let value = self.cpu.read8(&source);
                 self.cpu.write8(target, value);
                 self.cpu.pc += 1;
-                return 4
+                Ok(4)
             },
             Opcode::LD_R_HL { target } => {
-                let value = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let value = self.memory.borrow().read(self.cpu.read16(&HL))?;
                 self.cpu.write8(target, value);
                 self.cpu.pc += 1;
-                return 8
+                Ok(8)
             },
             Opcode::LD_HL_R {source } => {
                 let value = self.cpu.read8(&source);
-                self.memory.write(self.cpu.read16(&HL), value).unwrap();
+                self.memory.borrow_mut().write(self.cpu.read16(&HL), value)?;
                 self.cpu.pc += 1;
-                return 8
+                Ok(8)
             },
             Opcode::ADD_A_R { source } => {
                 let n1 = self.cpu.read8(&A);
@@ -780,11 +788,11 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1, n2));
                 self.cpu.set_flag(Flag::C, c);
                 self.cpu.pc += 1;
-                return 4
+                Ok(4)
             },
             Opcode::ADD_A_HL => {
                 let n1 = self.cpu.read8(&A);
-                let n2 = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let n2 = self.memory.borrow().read(self.cpu.read16(&HL))?;
                 let (sum, c) = n1.overflowing_add(n2);
                 self.cpu.write8(A, sum);
 
@@ -793,7 +801,7 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1, n2));
                 self.cpu.set_flag(Flag::C, c);
                 self.cpu.pc += 1;
-                return 8
+                Ok(8)
             },
             Opcode::ADC_A_R { source } => {
                 let n1 = self.cpu.read8(&A);
@@ -808,11 +816,11 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1, n2));
                 self.cpu.set_flag(Flag::C, c || partial_c);
                 self.cpu.pc += 1;
-                return 4
+                Ok(4)
             },
             Opcode::ADC_A_HL => {
                 let n1 = self.cpu.read8(&A);
-                let n2 = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let n2 = self.memory.borrow().read(self.cpu.read16(&HL))?;
                 let carry_flag = self.cpu.get_flag(Flag::C);
                 let (partial_sum, partial_c) = n1.overflowing_add(n2);
                 let (sum, c) = partial_sum.overflowing_add(carry_flag);
@@ -823,7 +831,7 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1, n2) || Cpu::has_half_carry(partial_sum, carry_flag));
                 self.cpu.set_flag(Flag::C, c || partial_c);
                 self.cpu.pc += 1;
-                return 8
+                Ok(8)
             },
             Opcode::SUB_A_R { source } => {
                 let n1 = self.cpu.read8(&A);
@@ -836,11 +844,11 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, Cpu::has_half_borrow(n1, n2));
                 self.cpu.set_flag(Flag::C, c);
                 self.cpu.pc += 1;
-                return 4
+                Ok(4)
             },
             Opcode::SUB_A_HL => {
                 let n1 = self.cpu.read8(&A);
-                let n2 = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let n2 = self.memory.borrow().read(self.cpu.read16(&HL))?;
                 let (sum, c) = n1.overflowing_sub(n2);
                 self.cpu.write8(A, sum);
 
@@ -849,7 +857,7 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, Cpu::has_half_borrow(n1, n2));
                 self.cpu.set_flag(Flag::C, c);
                 self.cpu.pc += 1;
-                return 8
+                Ok(8)
             },
             Opcode::SBC_A_R { source } => {
                 let n1 = self.cpu.read8(&A);
@@ -864,11 +872,11 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, Cpu::has_half_borrow(n1, n2) || Cpu::has_half_borrow(partial_sum, carry_flag));
                 self.cpu.set_flag(Flag::C, c || partial_c);
                 self.cpu.pc += 1;
-                return 4
+                Ok(4)
             },
             Opcode::SBC_A_HL => {
                 let n1 = self.cpu.read8(&A);
-                let n2 = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let n2 = self.memory.borrow().read(self.cpu.read16(&HL))?;
                 let carry_flag = self.cpu.get_flag(Flag::C);
                 let (partial_sum, partial_c) = n1.overflowing_sub(n2);
                 let (sum, c) = partial_sum.overflowing_sub(carry_flag);
@@ -879,7 +887,7 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, Cpu::has_half_borrow(n1, n2));
                 self.cpu.set_flag(Flag::C, c || partial_c);
                 self.cpu.pc += 1;
-                return 8
+                Ok(8)
             },
             Opcode::AND_A_R { source } => {
                 let n1 = self.cpu.read8(&A);
@@ -892,11 +900,11 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, true);
                 self.cpu.set_flag(Flag::C, false);
                 self.cpu.pc += 1;
-                return 4
+                Ok(4)
             },
             Opcode::AND_A_HL => {
                 let n1 = self.cpu.read8(&A);
-                let n2 = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let n2 = self.memory.borrow().read(self.cpu.read16(&HL))?;
                 let value = n1 & n2;
                 self.cpu.write8(A, value);
 
@@ -905,7 +913,7 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, true);
                 self.cpu.set_flag(Flag::C, false);
                 self.cpu.pc += 1;
-                return 8
+                Ok(8)
             },
             Opcode::XOR_A_R { source } => {
                 let n1 = self.cpu.read8(&A);
@@ -918,11 +926,11 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, false);
                 self.cpu.pc += 1;
-                return 4
+                Ok(4)
             },
             Opcode::XOR_A_HL => {
                 let n1 = self.cpu.read8(&A);
-                let n2 = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let n2 = self.memory.borrow().read(self.cpu.read16(&HL))?;
                 let value = n1 ^ n2;
                 self.cpu.write8(A, value);
 
@@ -931,7 +939,7 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, false);
                 self.cpu.pc += 1;
-                return 8
+                Ok(8)
             },
             Opcode::OR_A_R { source } => {
                 let n1 = self.cpu.read8(&A);
@@ -944,11 +952,11 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, false);
                 self.cpu.pc += 1;
-                return 4
+                Ok(4)
             },
             Opcode::OR_A_HL => {
                 let n1 = self.cpu.read8(&A);
-                let n2 = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let n2 = self.memory.borrow().read(self.cpu.read16(&HL))?;
                 let value = n1 | n2;
                 self.cpu.write8(A, value);
 
@@ -957,7 +965,7 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, false);
                 self.cpu.pc += 1;
-                return 8
+                Ok(8)
             },
             Opcode::CP_A_R { source } => {
                 let n1 = self.cpu.read8(&A);
@@ -969,11 +977,11 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, Cpu::has_half_borrow(n1, n2));
                 self.cpu.set_flag(Flag::C, c);
                 self.cpu.pc += 1;
-                return 4
+                Ok(4)
             },
             Opcode::CP_A_HL => {
                 let n1 = self.cpu.read8(&A);
-                let n2 = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let n2 = self.memory.borrow().read(self.cpu.read16(&HL))?;
                 let (sum, c) = n1.overflowing_sub(n2);
 
                 self.cpu.set_flag(Flag::Z, sum == 0);
@@ -981,39 +989,39 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, Cpu::has_half_borrow(n1, n2));
                 self.cpu.set_flag(Flag::C, c);
                 self.cpu.pc += 1;
-                return 8
+                Ok(8)
             },
             Opcode::LD_R16_N { target } => {
-                let lsb = self.memory.read(self.cpu.pc+1).unwrap();
-                let msb = self.memory.read(self.cpu.pc+2).unwrap();
+                let lsb = self.memory.borrow().read(self.cpu.pc+1)?;
+                let msb = self.memory.borrow().read(self.cpu.pc+2)?;
                 let value = cpu::join_bytes(msb, lsb);
                 self.cpu.write16(target, value);
                 self.cpu.pc += 3;
-                return 12
+                Ok(12)
             },
             Opcode::LD_R_N { target } => {
-                let value = self.memory.read(self.cpu.pc+1).unwrap();
+                let value = self.memory.borrow().read(self.cpu.pc+1)?;
                 self.cpu.write8(target, value);
                 self.cpu.pc += 2;
-                return 8
+                Ok(8)
             },
             Opcode::LD_HL_N => {
-                let value = self.memory.read(self.cpu.pc+1).unwrap();
-                self.memory.write(self.cpu.read16(&HL), value).unwrap();
+                let value = self.memory.borrow().read(self.cpu.pc+1)?;
+                self.memory.borrow_mut().write(self.cpu.read16(&HL), value)?;
                 self.cpu.pc += 2;
-                return 12
+                Ok(12)
             },
             Opcode::INC_R16 { target } => {
                 let value = self.cpu.read16(&target).wrapping_add(1);
                 self.cpu.write16(target, value);
                 self.cpu.pc += 1;
-                return 8
+                Ok(8)
             },
             Opcode::DEC_R16 { target } => {
                 let value = self.cpu.read16(&target).wrapping_sub(1);
                 self.cpu.write16(target, value);
                 self.cpu.pc += 1;
-                return 8
+                Ok(8)
             },
             Opcode::INC_R8 { target } => {
                 let n1 = self.cpu.read8(&target);
@@ -1024,7 +1032,7 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::N, false);
                 self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1, 1));
                 self.cpu.pc += 1;
-                return 4
+                Ok(4)
             },
             Opcode::DEC_R8 { target } => {
                 let n1 = self.cpu.read8(&target);
@@ -1035,29 +1043,29 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::N, true);
                 self.cpu.set_flag(Flag::H, Cpu::has_half_borrow(n1, 1));
                 self.cpu.pc += 1;
-                return 4
+                Ok(4)
             },
             Opcode::INC_HL => {
-                let n1 = self.memory.read(self.cpu.read16(&HL)).unwrap();  
+                let n1 = self.memory.borrow().read(self.cpu.read16(&HL))?;  
                 let value = n1.wrapping_add(1);
-                self.memory.write(self.cpu.read16(&HL), value).unwrap();
+                self.memory.borrow_mut().write(self.cpu.read16(&HL), value)?;
 
                 self.cpu.set_flag(Flag::Z, value == 0);
                 self.cpu.set_flag(Flag::N, false);
                 self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1, 1));
                 self.cpu.pc += 1;
-                return 12
+                Ok(12)
             },
             Opcode::DEC_HL => {
-                let n1 = self.memory.read(self.cpu.read16(&HL)).unwrap();  
+                let n1 = self.memory.borrow().read(self.cpu.read16(&HL))?;  
                 let value = n1.wrapping_sub(1);
-                self.memory.write(self.cpu.read16(&HL), value).unwrap();
+                self.memory.borrow_mut().write(self.cpu.read16(&HL), value)?;
 
                 self.cpu.set_flag(Flag::Z, value == 0);
                 self.cpu.set_flag(Flag::N, true);
                 self.cpu.set_flag(Flag::H, Cpu::has_half_borrow(n1, 1));
                 self.cpu.pc += 1;
-                return 12
+                Ok(12)
             },
             Opcode::SET_u3_R8 { bit, target } => {
                 let mut value = self.cpu.read8(&target);
@@ -1065,15 +1073,15 @@ impl Gameboy {
                 value |= mask;
                 self.cpu.write8(target, value);
                 self.cpu.pc += 2;
-                return 8
+                Ok(8)
             },
             Opcode::SET_u3_HL { bit } => {
-                let mut value = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let mut value = self.memory.borrow().read(self.cpu.read16(&HL))?;
                 let mask = 1 << bit;
                 value |= mask;
-                self.memory.write(self.cpu.read16(&HL), value).unwrap();
+                self.memory.borrow_mut().write(self.cpu.read16(&HL), value)?;
                 self.cpu.pc += 2;
-                return 16
+                Ok(16)
             }
             Opcode::RES_u3_R8 { bit, target } => {
                 let mut value = self.cpu.read8(&target);
@@ -1081,15 +1089,15 @@ impl Gameboy {
                 value &= mask;
                 self.cpu.write8(target, value);
                 self.cpu.pc += 2;
-                return 8
+                Ok(8)
             },
             Opcode::RES_u3_HL { bit } => {
-                let mut value = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let mut value = self.memory.borrow().read(self.cpu.read16(&HL))?;
                 let mask = !(1 << bit);
                 value &= mask;
-                self.memory.write(self.cpu.read16(&HL), value).unwrap();
+                self.memory.borrow_mut().write(self.cpu.read16(&HL), value)?;
                 self.cpu.pc += 2;
-                return 16
+                Ok(16)
             }
             Opcode::BIT_u3_R8 { bit, target } => {
                 let value = self.cpu.read8(&target);
@@ -1097,15 +1105,15 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::N, false);
                 self.cpu.set_flag(Flag::H, true);
                 self.cpu.pc += 2;
-                return 8
+                Ok(8)
             },
             Opcode::BIT_u3_HL { bit } => {
-                let value = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let value = self.memory.borrow().read(self.cpu.read16(&HL))?;
                 self.cpu.set_flag(Flag::Z, ((value >> bit) & 1) == 0);
                 self.cpu.set_flag(Flag::N, false);
                 self.cpu.set_flag(Flag::H, true);
                 self.cpu.pc += 2;
-                return 12
+                Ok(12)
             },
             Opcode::SWAP_R8 { target } => {
                 let mut value = self.cpu.read8(&target);
@@ -1114,16 +1122,16 @@ impl Gameboy {
                 value = initial_upper_byte | (initial_lower_byte << 4);
                 self.cpu.write8(target, value);
                 self.cpu.pc += 2;
-                return 8
+                Ok(8)
             },
             Opcode::SWAP_HL => {
-                let mut value = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let mut value = self.memory.borrow().read(self.cpu.read16(&HL))?;
                 let initial_upper_byte = value >> 4;
                 let initial_lower_byte = value & 15;
                 value = initial_upper_byte | (initial_lower_byte << 4);
-                self.memory.write(self.cpu.read16(&HL), value).unwrap();
+                self.memory.borrow_mut().write(self.cpu.read16(&HL), value)?;
                 self.cpu.pc += 2;
-                return 16
+                Ok(16)
             },
             Opcode::RLC_R8 { target } => {
                 let mut value = self.cpu.read8(&target);
@@ -1137,21 +1145,21 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, leading_bit == 1);
                 self.cpu.pc += 2;
-                return 8
+                Ok(8)
             },
             Opcode::RLC_HL => {
-                let mut value = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let mut value = self.memory.borrow().read(self.cpu.read16(&HL))?;
                 let leading_bit = value >> 7;
                 value <<= 1;
                 value |= leading_bit;
-                self.memory.write(self.cpu.read16(&HL), value).unwrap();
+                self.memory.borrow_mut().write(self.cpu.read16(&HL), value)?;
                 
                 self.cpu.set_flag(Flag::Z, value == 0);
                 self.cpu.set_flag(Flag::N, false);
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, leading_bit == 1);
                 self.cpu.pc += 2;
-                return 16
+                Ok(16)
             },
             Opcode::RRC_R8 { target } => {
                 let mut value = self.cpu.read8(&target);
@@ -1165,21 +1173,21 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, trailing_bit == 1);
                 self.cpu.pc += 2;
-                return 8
+                Ok(8)
             },
             Opcode::RRC_HL => {
-                let mut value = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let mut value = self.memory.borrow().read(self.cpu.read16(&HL))?;
                 let trailing_bit = value & 1;
                 value >>= 1;
                 value |= trailing_bit << 7;
-                self.memory.write(self.cpu.read16(&HL), value).unwrap();
+                self.memory.borrow_mut().write(self.cpu.read16(&HL), value)?;
 
                 self.cpu.set_flag(Flag::Z, value == 0);
                 self.cpu.set_flag(Flag::N, false);
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, trailing_bit == 1);
                 self.cpu.pc += 2;
-                return 16
+                Ok(16)
             },
             Opcode::RL_R8 { target } => {
                 let mut value = self.cpu.read8(&target);
@@ -1193,21 +1201,21 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, leading_bit == 1);
                 self.cpu.pc += 2;
-                return 8
+                Ok(8)
             },
             Opcode::RL_HL => {
-                let mut value = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let mut value = self.memory.borrow().read(self.cpu.read16(&HL))?;
                 let leading_bit = value >> 7;
                 value <<= 1;
                 value |= self.cpu.get_flag(Flag::C);
-                self.memory.write(self.cpu.read16(&HL), value).unwrap();
+                self.memory.borrow_mut().write(self.cpu.read16(&HL), value)?;
 
                 self.cpu.set_flag(Flag::Z, value == 0);
                 self.cpu.set_flag(Flag::N, false);
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, leading_bit == 1);
                 self.cpu.pc += 2;
-                return 16
+                Ok(16)
             },
             Opcode::RR_R8 { target } => {
                 let mut value = self.cpu.read8(&target);
@@ -1221,21 +1229,21 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, trailing_bit == 1);
                 self.cpu.pc += 2;
-                return 8
+                Ok(8)
             },
             Opcode::RR_HL => {
-                let mut value = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let mut value = self.memory.borrow().read(self.cpu.read16(&HL))?;
                 let trailing_bit = value & 1;
                 value >>= 1;
                 value |= self.cpu.get_flag(Flag::C) << 7;
-                self.memory.write(self.cpu.read16(&HL), value).unwrap();
+                self.memory.borrow_mut().write(self.cpu.read16(&HL), value)?;
                 
                 self.cpu.set_flag(Flag::Z, value == 0);
                 self.cpu.set_flag(Flag::N, false);
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, trailing_bit == 1);
                 self.cpu.pc += 2;
-                return 16
+                Ok(16)
             },
             Opcode::SLA_R8 { target } => {
                 let mut value = self.cpu.read8(&target);
@@ -1248,20 +1256,20 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, leading_bit == 1);
                 self.cpu.pc += 2;
-                return 8
+                Ok(8)
             },
             Opcode::SLA_HL => {
-                let mut value = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let mut value = self.memory.borrow().read(self.cpu.read16(&HL))?;
                 let leading_bit = value >> 7;
                 value <<= 1;
-                self.memory.write(self.cpu.read16(&HL), value).unwrap();
+                self.memory.borrow_mut().write(self.cpu.read16(&HL), value)?;
                 
                 self.cpu.set_flag(Flag::Z, value == 0);
                 self.cpu.set_flag(Flag::N, false);
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, leading_bit == 1);
                 self.cpu.pc += 2;
-                return 16
+                Ok(16)
             },
             Opcode::SRA_R8 { target } => {
                 let mut value = self.cpu.read8(&target);
@@ -1276,22 +1284,22 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, trailing_bit == 1);
                 self.cpu.pc += 2;
-                return 8
+                Ok(8)
             },
             Opcode::SRA_HL => {
-                let mut value = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let mut value = self.memory.borrow().read(self.cpu.read16(&HL))?;
                 let leading_bit = value & 0b1000_0000;
                 let trailing_bit = value & 1;
                 value >>= 1;
                 value |= leading_bit;
-                self.memory.write(self.cpu.read16(&HL), value).unwrap();
+                self.memory.borrow_mut().write(self.cpu.read16(&HL), value)?;
 
                 self.cpu.set_flag(Flag::Z, value == 0);
                 self.cpu.set_flag(Flag::N, false);
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, trailing_bit == 1);
                 self.cpu.pc += 2;
-                return 16
+                Ok(16)
             },
             Opcode::SRL_R8 { target } => {
                 let mut value = self.cpu.read8(&target);
@@ -1304,110 +1312,110 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, trailing_bit == 1);
                 self.cpu.pc += 2;
-                return 8
+                Ok(8)
             },
             Opcode::SRL_HL => {
-                let mut value = self.memory.read(self.cpu.read16(&HL)).unwrap();
+                let mut value = self.memory.borrow().read(self.cpu.read16(&HL))?;
                 let trailing_bit = value & 1;
                 value >>= 1;
-                self.memory.write(self.cpu.read16(&HL), value).unwrap();
+                self.memory.borrow_mut().write(self.cpu.read16(&HL), value)?;
     
                 self.cpu.set_flag(Flag::Z, value == 0);
                 self.cpu.set_flag(Flag::N, false);
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, trailing_bit == 1);
                 self.cpu.pc += 2;
-                return 16
+                Ok(16)
             },
             Opcode::POP_R16 { target } => {
-                let lower = self.pop();
-                let upper = self.pop();
+                let lower = self.pop()?;
+                let upper = self.pop()?;
                 self.cpu.write16(target, cpu::join_bytes(upper, lower));
                 self.cpu.pc += 1;
-                return 12
+                Ok(12)
             },
             Opcode::PUSH_R16 { target } => {
                 let (upper, lower) = cpu::split_word(self.cpu.read16(&target));
-                self.push(upper);
-                self.push(lower);
+                self.push(upper)?;
+                self.push(lower)?;
                 self.cpu.pc += 1;
-                return 16
+                Ok(16)
             },
             Opcode::RET => {
                 // RET does not increment the PC. CALL will instead store the PC + 1;
-                let lower = self.pop();
-                let upper = self.pop();
+                let lower = self.pop()?;
+                let upper = self.pop()?;
                 self.cpu.sp += 1;
                 self.cpu.pc = cpu::join_bytes(upper, lower);
-                return 16
+                Ok(16)
             },
             Opcode::RET_cc { condition, set } => {
                 // RET_cc does not increment the PC. CALL will instead store the PC + 1;
                 let cc = self.cpu.get_flag(condition);
                 if (cc != 0) == set {
-                    let lower = self.pop();
-                    let upper = self.pop();
+                    let lower = self.pop()?;
+                    let upper = self.pop()?;
                     self.cpu.pc = cpu::join_bytes(upper, lower);
-                    return 20
+                    return Ok(20)
                 }
                 self.cpu.pc += 1;
-                return 8
+                Ok(8)
             },
             Opcode::CALL_n16 => {
-                let addr_lower = self.memory.read(self.cpu.pc + 1).unwrap();
-                let addr_upper = self.memory.read(self.cpu.pc + 2).unwrap();
+                let addr_lower = self.memory.borrow().read(self.cpu.pc + 1)?;
+                let addr_upper = self.memory.borrow().read(self.cpu.pc + 2)?;
                 let (upper, lower) = cpu::split_word(self.cpu.pc + 1);
-                self.push(upper);
-                self.push(lower);
+                self.push(upper)?;
+                self.push(lower)?;
                 self.cpu.pc = cpu::join_bytes(addr_upper, addr_lower);
-                return 24
+                Ok(24)
             },
             Opcode::CALL_cc_n16 { condition, set } => {
-                let addr_lower = self.memory.read(self.cpu.pc + 1).unwrap();
-                let addr_upper = self.memory.read(self.cpu.pc + 2).unwrap();
+                let addr_lower = self.memory.borrow().read(self.cpu.pc + 1)?;
+                let addr_upper = self.memory.borrow().read(self.cpu.pc + 2)?;
                 let (upper, lower) = cpu::split_word(self.cpu.pc + 1);
                 let cc = self.cpu.get_flag(condition);
                 if (cc != 0) == set {
-                    self.push(upper);
-                    self.push(lower);
+                    self.push(upper)?;
+                    self.push(lower)?;
                     self.cpu.pc = cpu::join_bytes(addr_upper, addr_lower);
-                    return 24
+                    return Ok(24)
                 }
                 self.cpu.pc += 3;
-                return 12
+                Ok(12)
             },
             Opcode::JP_n16 => {
-                let addr_lower = self.memory.read(self.cpu.pc + 1).unwrap();
-                let addr_upper = self.memory.read(self.cpu.pc + 2).unwrap();
+                let addr_lower = self.memory.borrow().read(self.cpu.pc + 1)?;
+                let addr_upper = self.memory.borrow().read(self.cpu.pc + 2)?;
                 self.cpu.pc = cpu::join_bytes(addr_upper, addr_lower);
-                return 16
+                Ok(16)
             },
             Opcode::JP_cc_n16 { condition, set } => {
-                let addr_lower = self.memory.read(self.cpu.pc + 1).unwrap();
-                let addr_upper = self.memory.read(self.cpu.pc + 2).unwrap();
+                let addr_lower = self.memory.borrow().read(self.cpu.pc + 1)?;
+                let addr_upper = self.memory.borrow().read(self.cpu.pc + 2)?;
                 let cc = self.cpu.get_flag(condition);
                 if (cc != 0) == set {
                     self.cpu.pc = cpu::join_bytes(addr_upper, addr_lower);
-                    return 16
+                    return Ok(16)
                 }
                 self.cpu.pc += 3;
-                return 12
+                Ok(12)
                 
             },
             Opcode::JP_HL => {
                 self.cpu.pc = self.cpu.read16(&HL);
-                return 4
+                Ok(4)
             },
             Opcode::RST { vct } => {
                 let (upper, lower) = cpu::split_word(self.cpu.pc + 1);
-                self.push(upper);
-                self.push(lower);
+                self.push(upper)?;
+                self.push(lower)?;
                 self.cpu.pc = vct;
-                return 16
+                Ok(16)
             },
             Opcode::ADD_A_n8 => {
                 let n1 = self.cpu.read8(&A);
-                let n2 = self.memory.read(self.cpu.pc + 1).unwrap();
+                let n2 = self.memory.borrow().read(self.cpu.pc + 1)?;
                 let (sum, c) = n1.overflowing_add(n2);
                 self.cpu.write8(A, sum);
 
@@ -1416,11 +1424,11 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1, n2));
                 self.cpu.set_flag(Flag::C, c);
                 self.cpu.pc += 2;
-                return 8
+                Ok(8)
             },
             Opcode::ADC_A_n8 => {
                 let n1 = self.cpu.read8(&A);
-                let n2 = self.memory.read(self.cpu.pc + 1).unwrap();
+                let n2 = self.memory.borrow().read(self.cpu.pc + 1)?;
                 let carry_flag = self.cpu.get_flag(Flag::C);
                 let (partial_sum, partial_c) = n1.overflowing_add(n2);
                 let (sum, c) = partial_sum.overflowing_add(carry_flag);
@@ -1431,11 +1439,11 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1, n2));
                 self.cpu.set_flag(Flag::C, c || partial_c);
                 self.cpu.pc += 2;
-                return 8
+                Ok(8)
             },
             Opcode::SUB_A_n8 => {
                 let n1 = self.cpu.read8(&A);
-                let n2 = self.memory.read(self.cpu.pc + 1).unwrap();
+                let n2 = self.memory.borrow().read(self.cpu.pc + 1)?;
                 let (sum, c) = n1.overflowing_sub(n2);
                 self.cpu.write8(A, sum);
 
@@ -1444,11 +1452,11 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, Cpu::has_half_borrow(n1, n2));
                 self.cpu.set_flag(Flag::C, c);
                 self.cpu.pc += 2;
-                return 8
+                Ok(8)
             },
             Opcode::SBC_A_n8 => {
                 let n1 = self.cpu.read8(&A);
-                let n2 = self.memory.read(self.cpu.pc + 1).unwrap();
+                let n2 = self.memory.borrow().read(self.cpu.pc + 1)?;
                 let carry_flag = self.cpu.get_flag(Flag::C);
                 let (partial_sum, partial_c) = n1.overflowing_sub(n2);
                 let (sum, c) = partial_sum.overflowing_sub(carry_flag);
@@ -1459,11 +1467,11 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, Cpu::has_half_borrow(n1, n2) || Cpu::has_half_borrow(partial_sum, carry_flag));
                 self.cpu.set_flag(Flag::C, c || partial_c);
                 self.cpu.pc += 2;
-                return 8
+                Ok(8)
             },
             Opcode::AND_A_n8 => {
                 let n1 = self.cpu.read8(&A);
-                let n2 = self.memory.read(self.cpu.pc + 1).unwrap();
+                let n2 = self.memory.borrow().read(self.cpu.pc + 1)?;
                 let value = n1 & n2;
                 self.cpu.write8(A, value);
 
@@ -1472,11 +1480,11 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, true);
                 self.cpu.set_flag(Flag::C, false);
                 self.cpu.pc += 2;
-                return 8
+                Ok(8)
             },
             Opcode::XOR_A_n8 => {
                 let n1 = self.cpu.read8(&A);
-                let n2 = self.memory.read(self.cpu.pc + 1).unwrap();
+                let n2 = self.memory.borrow().read(self.cpu.pc + 1)?;
                 let value = n1 ^ n2;
                 self.cpu.write8(A, value);
 
@@ -1485,11 +1493,11 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, false);
                 self.cpu.pc += 2;
-                return 8
+                Ok(8)
             },
             Opcode::OR_A_n8 => {
                 let n1 = self.cpu.read8(&A);
-                let n2 = self.memory.read(self.cpu.pc + 1).unwrap();
+                let n2 = self.memory.borrow().read(self.cpu.pc + 1)?;
                 let value = n1 | n2;
                 self.cpu.write8(A, value);
 
@@ -1498,11 +1506,11 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, false);
                 self.cpu.pc += 2;
-                return 8
+                Ok(8)
             },
             Opcode::CP_A_n8 => {
                 let n1 = self.cpu.read8(&A);
-                let n2 = self.memory.read(self.cpu.pc + 1).unwrap();
+                let n2 = self.memory.borrow().read(self.cpu.pc + 1)?;
                 let (sum, c) = n1.overflowing_sub(n2);
 
                 self.cpu.set_flag(Flag::Z, sum == 0);
@@ -1510,44 +1518,44 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, Cpu::has_half_borrow(n1, n2));
                 self.cpu.set_flag(Flag::C, c);
                 self.cpu.pc += 2;
-                return 8
+                Ok(8)
             },
             Opcode::JR_e8 => {
-                let rel_addr: i16 = self.memory.read(self.cpu.pc).unwrap() as i16;
+                let rel_addr: i16 = self.memory.borrow().read(self.cpu.pc)? as i16;
                 let temp_pc = self.cpu.pc as i16;
                 let new_addr = temp_pc + rel_addr;
                 self.cpu.pc = new_addr as u16;
-                return 12 
+                Ok(12) 
             },
             Opcode::JR_cc_e8 { condition, set } => {
                 let cc = self.cpu.get_flag(condition);
                 if (cc != 0) == set {
-                    let rel_addr: i16 = self.memory.read(self.cpu.pc).unwrap() as i16;
+                    let rel_addr: i16 = self.memory.borrow().read(self.cpu.pc)? as i16;
                     let temp_pc = self.cpu.pc as i16;
                     let new_addr = temp_pc + rel_addr;
                     self.cpu.pc = new_addr as u16;
-                    return 12                     
+                    return Ok(12)                     
                 }
                 self.cpu.pc += 2;
-                return 8
+                Ok(8)
             },
             Opcode::LD_R16_A { target } => {
                 let value = self.cpu.read8(&A);
-                self.memory.write(self.cpu.read16(&target), value).unwrap();
+                self.memory.borrow_mut().write(self.cpu.read16(&target), value)?;
                 self.cpu.pc += 1;
-                return 8
+                Ok(8)
             },
             Opcode::LD_HLID_A { inc } => {
                 let value = self.cpu.read8(&A);
                 let target = self.cpu.read16(&HL);
-                self.memory.write(target, value).unwrap();
+                self.memory.borrow_mut().write(target, value)?;
                 if inc {
                     self.cpu.write16(HL, target.wrapping_add(1));
                 } else {
                     self.cpu.write16(HL, target.wrapping_sub(1));
                 }
                 self.cpu.pc += 1;
-                return 8
+                Ok(8)
             },
             Opcode::ADD_HL_R16 { target } => {
                 let n1 = self.cpu.read16(&HL);
@@ -1559,7 +1567,7 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1 as u8, n2 as u8));
                 self.cpu.set_flag(Flag::C, carry);
                 self.cpu.pc += 1;
-                return 8
+                Ok(8)
             },
             Opcode::ADD_HL_SP => {
                 let n1 = self.cpu.read16(&HL);
@@ -1570,17 +1578,17 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, Cpu::has_half_carry(n1 as u8, self.cpu.sp as u8));
                 self.cpu.set_flag(Flag::C, carry);
                 self.cpu.pc += 1;
-                return 8
+                Ok(8)
             },
             Opcode::LD_A_R16 { target } => {
-                let value = self.memory.read(self.cpu.read16(&target)).unwrap();
+                let value = self.memory.borrow().read(self.cpu.read16(&target))?;
                 self.cpu.write8(A, value);
                 self.cpu.pc += 1;
-                return 8
+                Ok(8)
             },
             Opcode::LD_A_HLID { inc } => {
                 let target = self.cpu.read16(&HL);
-                let value = self.memory.read(target).unwrap();
+                let value = self.memory.borrow().read(target)?;
                 self.cpu.write8(A, value);
                 if inc {
                     self.cpu.write16(HL, target.wrapping_add(1));
@@ -1588,65 +1596,65 @@ impl Gameboy {
                     self.cpu.write16(HL, target.wrapping_sub(1));
                 }
                 self.cpu.pc += 1;
-                return 8
+                Ok(8)
             },
             Opcode::LD_a16_SP => {
-                let low = self.memory.read(self.cpu.pc + 1).unwrap();
-                let high = self.memory.read(self.cpu.pc + 2).unwrap();
+                let low = self.memory.borrow().read(self.cpu.pc + 1)?;
+                let high = self.memory.borrow().read(self.cpu.pc + 2)?;
                 let target = cpu::join_bytes(high, low);
-                self.memory.write(target, self.cpu.sp as u8).unwrap();
-                self.memory.write(target + 1, (self.cpu.sp >> 8) as u8).unwrap();
+                self.memory.borrow_mut().write(target, self.cpu.sp as u8)?;
+                self.memory.borrow_mut().write(target + 1, (self.cpu.sp >> 8) as u8)?;
                 self.cpu.pc += 3;
-                return 20
+                Ok(20)
             }
             Opcode::LDH_a8_A => {
                 let value = self.cpu.read8(&A);
-                let target = self.memory.read(self.cpu.pc + 1).unwrap() as u16;
-                self.memory.write(target + 0xFF, value).unwrap();
+                let target = self.memory.borrow().read(self.cpu.pc + 1)? as u16;
+                self.memory.borrow_mut().write(target + 0xFF, value)?;
                 self.cpu.pc += 2;
-                return 12
+                Ok(12)
             },
             Opcode::LDH_A_a8 => {
-                let target = self.memory.read(self.cpu.pc + 1).unwrap() as u16;
-                let value = self.memory.read(target + 0xFF).unwrap();
+                let target = self.memory.borrow().read(self.cpu.pc + 1)? as u16;
+                let value = self.memory.borrow().read(target + 0xFF)?;
                 self.cpu.write8(A, value);
                 self.cpu.pc += 2;
-                return 12
+                Ok(12)
             },
             Opcode::LDH_c_A => {
                 let value = self.cpu.read8(&A);
                 let target = self.cpu.read8(&C) as u16 + 0xFF;
-                self.memory.write(target, value).unwrap();
+                self.memory.borrow_mut().write(target, value)?;
                 self.cpu.pc += 1;
-                return 8
+                Ok(8)
             },
             Opcode::LDH_A_c => {
                 let target = self.cpu.read8(&C) as u16 + 0xFF;   
-                let value = self.memory.read(target).unwrap();
+                let value = self.memory.borrow().read(target)?;
                 self.cpu.write8(A, value);
                 self.cpu.pc += 1;
-                return 8
+                Ok(8)
             },
             Opcode::LD_a16_A => {
-                let low = self.memory.read(self.cpu.pc + 1).unwrap();
-                let high = self.memory.read(self.cpu.pc + 2).unwrap();
+                let low = self.memory.borrow().read(self.cpu.pc + 1)?;
+                let high = self.memory.borrow().read(self.cpu.pc + 2)?;
                 let target = cpu::join_bytes(high, low);
                 let value = self.cpu.read8(&A);
-                self.memory.write(target, value).unwrap();
+                self.memory.borrow_mut().write(target, value)?;
                 self.cpu.pc += 3;
-                return 16
+                Ok(16)
             },
             Opcode::LD_A_a16 => {
-                let low = self.memory.read(self.cpu.pc + 1).unwrap();
-                let high = self.memory.read(self.cpu.pc + 2).unwrap();
+                let low = self.memory.borrow().read(self.cpu.pc + 1)?;
+                let high = self.memory.borrow().read(self.cpu.pc + 2)?;
                 let source = cpu::join_bytes(high, low);
-                let value = self.memory.read(source).unwrap();
+                let value = self.memory.borrow().read(source)?;
                 self.cpu.write8(A, value);
                 self.cpu.pc += 3;
-                return 16
+                Ok(16)
             },
             Opcode::ADD_SP_e8 => {
-                let n1 = self.memory.read(self.cpu.pc + 1).unwrap();
+                let n1 = self.memory.borrow().read(self.cpu.pc + 1)?;
                 let n1_3b = n1 & 0x08;
                 let n2_3b = self.cpu.sp as u8 & 0x08;
                 
@@ -1665,10 +1673,10 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::C, overflow7);
 
                 self.cpu.pc += 2;
-                return 16
+                Ok(16)
             },
             Opcode::LD_HL_SPe8 => {
-                let n1 = self.memory.read(self.cpu.pc + 1).unwrap();
+                let n1 = self.memory.borrow().read(self.cpu.pc + 1)?;
                 let target = (self.cpu.sp as i16 + n1 as i16) as u16;
                 
                 let n1_3b = n1 & 0x08;
@@ -1686,12 +1694,12 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, overflow3);
                 self.cpu.set_flag(Flag::C, overflow7);
                 self.cpu.pc += 2;
-                return 12
+                Ok(12)
             }
             Opcode::LD_SP_HL => {
                 self.cpu.sp = self.cpu.read16(&HL);
                 self.cpu.pc += 1;
-                return 8
+                Ok(8)
             },
             Opcode::RLCA => {
                 let mut value = self.cpu.read8(&A);
@@ -1705,7 +1713,7 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, leading_bit == 1);
                 self.cpu.pc += 1;
-                return 4
+                Ok(4)
             },
             Opcode::RRCA => {
                 let mut value = self.cpu.read8(&A);
@@ -1719,7 +1727,7 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, trailing_bit == 1);
                 self.cpu.pc += 1;
-                return 4
+                Ok(4)
             },
             Opcode::RLA => {
                 let mut value = self.cpu.read8(&A);
@@ -1733,7 +1741,7 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, leading_bit == 1);
                 self.cpu.pc += 1;
-                return 4
+                Ok(4)
             },
             Opcode::RRA => {
                 let mut value = self.cpu.read8(&A);
@@ -1747,7 +1755,7 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, trailing_bit == 1);
                 self.cpu.pc += 1;
-                return 4
+                Ok(4)
             },
             Opcode::DAA => {
                 let target = self.cpu.read8(&A);
@@ -1774,21 +1782,21 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::Z, adj == 0);
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.pc += 1;
-                return 4
+                Ok(4)
             },
             Opcode::CPL => {
                 self.cpu.write8(A, !self.cpu.read8(&A));
                 self.cpu.set_flag(Flag::N, true);
                 self.cpu.set_flag(Flag::H, true);
                 self.cpu.pc += 1;
-                return 4
+                Ok(4)
             }
             Opcode::SCF => {
                 self.cpu.set_flag(Flag::N, false);
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, true);
                 self.cpu.pc += 1;
-                return 4
+                Ok(4)
             },
             Opcode::CCF => {
                 let c = self.cpu.get_flag(Flag::C);
@@ -1796,25 +1804,25 @@ impl Gameboy {
                 self.cpu.set_flag(Flag::H, false);
                 self.cpu.set_flag(Flag::C, c == 0);
                 self.cpu.pc += 1;
-                return 4
+                Ok(4)
             },
             Opcode::RETI => {
-                let lower = self.pop();
-                let upper = self.pop();
+                let lower = self.pop()?;
+                let upper = self.pop()?;
                 self.cpu.sp += 1;
                 self.cpu.pc = cpu::join_bytes(upper, lower);
                 self.cpu.ime = true;
-                return 16
+                Ok(16)
             },
             Opcode::DI => {
                 self.cpu.ime = false;
                 self.cpu.pc += 1;
-                return 4
+                Ok(4)
             },
             Opcode::EI => {
                 self.cpu.ime = true;
                 self.cpu.pc += 1;
-                return 4
+                Ok(4)
             },
         }
     }
