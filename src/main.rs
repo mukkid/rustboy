@@ -14,14 +14,13 @@ use thiserror::Error;
 use anyhow::Result;
 
 fn main() {
-    todo!("load ROM");
     let mut gb = Gameboy {
         cpu: Cpu::default(),
         memory: Memory::new(),
         gpu: Gpu::new(),
     };
     gb.gpu.assemble_tiles();
-    screen::render();
+    screen::render(&gb.gpu.tiles[..10]);
     let _ = gb.run();
 }
 

@@ -8,7 +8,7 @@ pub struct Gpu {
     line: u8,
     vram: [u8; 0x2000],
     oam: [u8; 0xA0],
-    tiles: Vec<Tile>,
+    pub tiles: Vec<Tile>,
     lcdc: u8,
     stat: u8,
     scroll_x: u8,
@@ -20,13 +20,13 @@ pub struct Gpu {
     frame_buffer: [u8; 160 * 144] // 160x144 screen resolution
 }
 
-#[derive(Copy, Clone)]
-struct Tile {
-    pixels: [Color; 64],
+#[derive(Copy, Clone, Debug)]
+pub struct Tile {
+    pub pixels: [Color; 64],
 }
 
-#[derive(Copy, Clone)]
-enum Color {
+#[derive(Copy, Clone, Debug)]
+pub enum Color {
     Black,
     DGray,
     LGray,
@@ -89,12 +89,12 @@ impl Gpu {
     
     pub fn assemble_tiles(&mut self) {
         for i in 0..512 {
-            self.tiles[i] = Self::load_tile_from_bytes(&self.vram[i*8..i*8+64]) 
+            self.tiles[i] = Self::load_tile_from_bytes(&self.vram[i*16..(i+1)*16]) 
         }
     }
 
     fn load_tile_from_bytes(bytes: &[u8]) -> Tile {
-        let pixels = [Color::White; 64];
+        let mut pixels = [Color::White; 64];
         for (index, (lsb, msb)) in bytes.iter().tuples().enumerate() {
             for i in 0..8 {
                 let bit = 7 - i;
@@ -107,7 +107,7 @@ impl Gpu {
                     [1, 1] => Color::Black,
                     _ => unreachable!()
                 };
-                pixels[index * 8 + i];
+                pixels[index * 8 + i] = p;
             } 
         }
         Tile { pixels }
