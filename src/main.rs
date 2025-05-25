@@ -1,6 +1,7 @@
 mod cpu;
 mod gpu;
 mod memory;
+mod screen;
 
 use cpu::Cpu;
 use cpu::{Register8, Register16, Flag};
@@ -13,11 +14,14 @@ use thiserror::Error;
 use anyhow::Result;
 
 fn main() {
+    todo!("load ROM");
     let mut gb = Gameboy {
         cpu: Cpu::default(),
         memory: Memory::new(),
         gpu: Gpu::new(),
     };
+    gb.gpu.assemble_tiles();
+    screen::render();
     let _ = gb.run();
 }
 
