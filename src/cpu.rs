@@ -41,6 +41,7 @@ pub enum Register16 {
     SP,
 }
 
+#[derive(Debug)]
 pub enum Flag {
     Z,
     N,

@@ -3,6 +3,9 @@ mod gpu;
 mod memory;
 mod screen;
 
+use std::fs::File;
+use std::io::Read;
+
 use cpu::Cpu;
 use cpu::{Register8, Register16, Flag};
 use cpu::Register8::*;
@@ -19,8 +22,17 @@ fn main() {
         memory: Memory::new(),
         gpu: Gpu::new(),
     };
+    gb.cpu.pc = 0x0100;
+    gb.cpu.sp = 0xFFFE;
+    // ERROR: ROM isn't being read properly
+    let mut f = File::open("/home/mukund/projects/rust/rustboy/tetris.gb").unwrap();
+    let mut buff: Vec<u8> = vec![];
+    f.read_to_end(&mut buff).unwrap();
+    for (index, byte) in buff.bytes().enumerate() {
+        let _ = gb.write(index as u16, byte.unwrap());
+    }
     gb.gpu.assemble_tiles();
-    screen::render(&gb.gpu.tiles[..10]);
+    // screen::render(&gb.gpu.tiles[..10]);
     let _ = gb.run();
 }
 
@@ -30,6 +42,7 @@ pub struct MemoryAddressError;
 
 
 #[allow(non_camel_case_types)]
+#[derive(Debug)]
 enum Opcode {
     NOP,
     HALT,
@@ -156,7 +169,9 @@ impl Gameboy {
         match address {
             0x0000..=0x7FFF => self.memory.read(address),
             0x8000..=0x9FFF => self.gpu.read(address),
+            0xA000..=0xBFFF => self.memory.read(address),
             0xC000..=0xCFFF => self.memory.read(address),
+            0xD000..=0xDFFF => self.memory.read(address),
             0xE000..=0xFDFF => self.memory.read(address),
             0xFE00..=0xFE9F => self.gpu.read(address),
             0xFF80..=0xFFFE => self.memory.read(address),
@@ -168,7 +183,9 @@ impl Gameboy {
         match address {
             0x0000..=0x7FFF => self.memory.write(address, value),
             0x8000..=0x9FFF => self.gpu.write(address, value),
+            0xA000..=0xBFFF => self.memory.write(address, value),
             0xC000..=0xCFFF => self.memory.write(address, value),
+            0xD000..=0xDFFF => self.memory.write(address, value),
             0xE000..=0xFDFF => self.memory.write(address, value),
             0xFE00..=0xFE9F => self.gpu.write(address, value),
             0xFF80..=0xFFFE => self.memory.write(address, value),
@@ -178,19 +195,24 @@ impl Gameboy {
 
     fn run(&mut self) -> Result<()> {
         loop {
+            println!("{:x}: {:x}", self.read(self.cpu.pc).unwrap(), self.cpu.pc);
+            if self.cpu.pc == 0x0038 { panic!() }
             let cycles_elapsed = self.run_single_opcode()?;
             self.gpu.step(cycles_elapsed);
-            todo!("timer wait accounting for clock, instruction cycles, and draw buffer");
+            // todo!("timer wait accounting for clock, instruction cycles, and draw buffer");
         }
     }
 
     fn run_single_opcode(&mut self) -> Result<i32> {
         let opcode = self.fetch_opcode();
+        dbg!(&opcode);
         self.execute(opcode)
     }
 
     fn fetch_opcode(&self) -> Opcode {
-        let byte = self.read(self.cpu.pc).unwrap();
+        let Ok(byte) = self.read(self.cpu.pc) else {
+            panic!("We got lost");
+        };
         match byte {
             0x00 => Opcode::NOP,
             0x01 => Opcode::LD_R16_N { target: BC },

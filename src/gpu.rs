@@ -6,7 +6,7 @@ pub struct Gpu {
     pub gpu_mode: GpuMode,
     cycles: i32,
     line: u8,
-    vram: [u8; 0x2000],
+    pub vram: [u8; 0x2000],
     oam: [u8; 0xA0],
     pub tiles: Vec<Tile>,
     lcdc: u8,
